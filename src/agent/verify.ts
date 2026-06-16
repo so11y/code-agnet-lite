@@ -105,7 +105,7 @@ export async function discoverVerifyCommands(cwd: string): Promise<string[]> {
     commands.push('npx tsc --noEmit');
   }
 
-  return commands.length > 0 ? commands : ['npx tsc --noEmit'];
+  return commands;
 }
 
 export async function runVerifyCommand(cwd: string, command: string): Promise<VerifyResult> {
@@ -208,6 +208,23 @@ export async function runVerifyAndFixLoop(
   review: TurnReview
 ): Promise<void> {
   const commands = await discoverVerifyCommands(session.cwd);
+
+  if (commands.length === 0) {
+    session.say(
+      'system',
+      [
+        '## 无法自动验证',
+        '',
+        `触发原因：${review.gate.reason}`,
+        '',
+        '当前工作区未找到可用的验证命令（如 npm test、npm run typecheck 或 tsconfig.json）。',
+        '已跳过自动验证，请手动确认改动是否正确。'
+      ].join('\n')
+    );
+    session.status('done', '完成（无可用验证命令）');
+    return;
+  }
+
   let replans = 0;
 
   for (let fixRound = 0; ; fixRound += 1) {
@@ -243,6 +260,6 @@ export async function runVerifyAndFixLoop(
     }
 
     session.appendUser(formatVerifyFailure(failures, fixRound + 1));
-    await agent.run({suppressTerminalStatus: true});
+    await agent.run();
   }
 }

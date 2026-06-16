@@ -12,10 +12,6 @@ export type AgentRunResult = {
   reason: 'final_answer' | 'max_steps';
 };
 
-export type AgentRunOptions = {
-  suppressTerminalStatus?: boolean;
-};
-
 export abstract class ReActAgent {
   protected readonly maxSteps: number;
   protected readonly session: AgentSession;
@@ -25,16 +21,15 @@ export abstract class ReActAgent {
     this.session = session;
   }
 
-  async run(options: AgentRunOptions = {}): Promise<AgentRunResult> {
-    const suppressTerminalStatus = options.suppressTerminalStatus ?? false;
-    return this.runLoop(suppressTerminalStatus);
+  async run(): Promise<AgentRunResult> {
+    return this.runLoop();
   }
 
   protected buildLlmMessages(): AgentMessage[] {
     return [...this.session.buildStateMessages(), ...this.session.messages];
   }
 
-  private async runLoop(suppressTerminalStatus: boolean): Promise<AgentRunResult> {
+  private async runLoop(): Promise<AgentRunResult> {
     for (let step = 1; step <= this.maxSteps; step += 1) {
       this.session.status('thinking', `${step}/${this.maxSteps}`);
 
@@ -50,9 +45,6 @@ export abstract class ReActAgent {
       this.session.commitAssistant(message, streamed);
 
       if (!message.tool_calls?.length) {
-        if (!suppressTerminalStatus) {
-          this.session.status('done', '完成');
-        }
         return {completed: true, steps: step, reason: 'final_answer'};
       }
 
@@ -61,9 +53,6 @@ export abstract class ReActAgent {
       }
     }
 
-    if (!suppressTerminalStatus) {
-      this.session.status('error', `已执行 ${this.maxSteps} 步，但仍未得到最终回答。`);
-    }
     return {completed: false, steps: this.maxSteps, reason: 'max_steps'};
   }
 

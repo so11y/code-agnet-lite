@@ -25,6 +25,29 @@ const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMe
   tool_calls: message.tool_calls
 });
 
+type StateListKey = 'visitedFiles' | 'searchedTerms' | 'writtenFiles' | 'executedCommands';
+
+type ToolTrack = {
+  stateKey: StateListKey;
+  field: string;
+  turnKey?: keyof TurnOperations;
+};
+
+const TOOL_TRACKS: Record<string, ToolTrack> = {
+  read_file: {stateKey: 'visitedFiles', field: 'path'},
+  grep: {stateKey: 'searchedTerms', field: 'pattern'},
+  write_file: {stateKey: 'writtenFiles', field: 'path', turnKey: 'writtenFiles'},
+  run_cmd: {stateKey: 'executedCommands', field: 'command', turnKey: 'executedCommands'}
+};
+
+function pickString(input: unknown, field: string): string | undefined {
+  if (!input || typeof input !== 'object' || !(field in input)) {
+    return;
+  }
+
+  return String((input as Record<string, unknown>)[field]);
+}
+
 export class AgentSession {
   cwd: string;
   reasoningMode?: ReasoningMode;
@@ -32,8 +55,7 @@ export class AgentSession {
   readonly state: AgentState;
   readonly tokenUsage: TokenUsage = createTokenUsage();
   private turnUserInput = '';
-  private turnWrittenFiles: string[] = [];
-  private turnExecutedCommands: string[] = [];
+  private turnOps: TurnOperations = {writtenFiles: [], executedCommands: []};
 
   constructor(readonly options: AgentSessionOptions) {
     this.cwd = options.cwd;
@@ -46,8 +68,7 @@ export class AgentSession {
 
   beginTurn(userInput: string) {
     this.turnUserInput = userInput;
-    this.turnWrittenFiles = [];
-    this.turnExecutedCommands = [];
+    this.turnOps = {writtenFiles: [], executedCommands: []};
   }
 
   appendUser(content: string) {
@@ -86,26 +107,20 @@ export class AgentSession {
   }
 
   recordToolCall(name: string, input: unknown) {
-    if (name === 'read_file' && input && typeof input === 'object' && 'path' in input) {
-      this.state.visitedFiles = union(this.state.visitedFiles, [String((input as {path: string}).path)]);
+    const track = TOOL_TRACKS[name];
+    if (!track) {
+      return;
     }
 
-    if (name === 'grep' && input && typeof input === 'object' && 'pattern' in input) {
-      this.state.searchedTerms = union(this.state.searchedTerms, [
-        String((input as {pattern: string}).pattern)
-      ]);
+    const value = pickString(input, track.field);
+    if (!value) {
+      return;
     }
 
-    if (name === 'write_file' && input && typeof input === 'object' && 'path' in input) {
-      const path = String((input as {path: string}).path);
-      this.state.writtenFiles = union(this.state.writtenFiles, [path]);
-      this.turnWrittenFiles = union(this.turnWrittenFiles, [path]);
-    }
+    this.state[track.stateKey] = union(this.state[track.stateKey], [value]);
 
-    if (name === 'run_cmd' && input && typeof input === 'object' && 'command' in input) {
-      const command = String((input as {command: string}).command);
-      this.state.executedCommands = union(this.state.executedCommands, [command]);
-      this.turnExecutedCommands = union(this.turnExecutedCommands, [command]);
+    if (track.turnKey) {
+      this.turnOps[track.turnKey] = union(this.turnOps[track.turnKey], [value]);
     }
   }
 
@@ -122,8 +137,8 @@ export class AgentSession {
 
   refreshOperations(): TurnOperations {
     return {
-      writtenFiles: [...this.turnWrittenFiles],
-      executedCommands: [...this.turnExecutedCommands]
+      writtenFiles: [...this.turnOps.writtenFiles],
+      executedCommands: [...this.turnOps.executedCommands]
     };
   }
 

@@ -35,7 +35,7 @@ async function runTotLoop(agent: CodeAgent, session: AgentSession): Promise<void
 
     let result;
     try {
-      result = await agent.run({suppressTerminalStatus: true});
+      result = await agent.run();
     } catch (error) {
       await updateStateFromRun(
         session,
@@ -76,7 +76,7 @@ export async function runAgentTurn(
 
   switch (route.mode) {
     case 'react':
-      await agent.run({suppressTerminalStatus: true});
+      await agent.run();
       break;
     case 'tot':
       await runTotLoop(agent, session);
