@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type {ChatCompletion} from 'openai/resources/chat/completions';
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {tools} from '../tools/index.js';
 import {
@@ -6,9 +7,34 @@ import {
   getOpenAiModel,
   getRequiredOpenAiApiKey
 } from '../utils/env.js';
-import type {AgentMessage} from './types.js';
+import type {AgentMessage, LlmOptions, LlmStreamOptions, TokenUsage} from './session-types.js';
 
 const DEFAULT_MODEL = '';
+
+function normalizeUsage(usage?: {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}): TokenUsage | undefined {
+  if (!usage) {
+    return;
+  }
+
+  const prompt = usage.prompt_tokens ?? 0;
+  const completion = usage.completion_tokens ?? 0;
+
+  return {
+    prompt,
+    completion,
+    total: usage.total_tokens ?? prompt + completion
+  };
+}
+
+function recordUsage(options: LlmOptions | undefined, usage?: TokenUsage) {
+  if (usage) {
+    options?.session?.recordTokenUsage(usage);
+  }
+}
 
 function createClient() {
   return new OpenAI({
@@ -30,33 +56,49 @@ function createChatCompletion(messages: AgentMessage[], withTools: boolean) {
   });
 }
 
-export async function callLlm(messages: AgentMessage[]) {
-  return createChatCompletion(messages, true);
+export async function callLlm(
+  messages: AgentMessage[],
+  options?: LlmOptions
+): Promise<ChatCompletion> {
+  const response = await createChatCompletion(messages, true);
+  recordUsage(options, normalizeUsage(response.usage));
+  return response;
 }
 
-export async function callPlainLlm(messages: AgentMessage[]) {
-  return createChatCompletion(messages, false);
+export async function callPlainLlm(
+  messages: AgentMessage[],
+  options?: LlmOptions
+): Promise<ChatCompletion> {
+  const response = await createChatCompletion(messages, false);
+  recordUsage(options, normalizeUsage(response.usage));
+  return response;
 }
 
 export async function callLlmStream(
   messages: AgentMessage[],
-  onDelta: (delta: string) => void
+  options: LlmStreamOptions
 ): Promise<ChatCompletionAssistantMessageParam> {
   const stream = await createClient().chat.completions.create({
     model: getOpenAiModel(DEFAULT_MODEL),
     messages,
     stream: true,
+    stream_options: {include_usage: true},
     tools: tools.map((tool) => tool.openaiTool),
     tool_choice: 'auto'
   });
 
   let content = '';
+  let usage: TokenUsage | undefined;
   const toolCallsByIndex = new Map<
     number,
     {id: string; name: string; arguments: string}
   >();
 
   for await (const chunk of stream) {
+    if (chunk.usage) {
+      usage = normalizeUsage(chunk.usage);
+    }
+
     const delta = chunk.choices[0]?.delta;
     if (!delta) {
       continue;
@@ -64,7 +106,7 @@ export async function callLlmStream(
 
     if (delta.content) {
       content += delta.content;
-      onDelta(delta.content);
+      options.onDelta(delta.content);
     }
 
     if (delta.tool_calls) {
@@ -91,6 +133,8 @@ export async function callLlmStream(
       }
     }
   }
+
+  recordUsage(options, usage);
 
   const toolCalls = [...toolCallsByIndex.entries()]
     .sort(([left], [right]) => left - right)

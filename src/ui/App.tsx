@@ -1,18 +1,19 @@
 import path from 'node:path';
 import React, {useCallback, useState} from 'react';
 import {Box, Text} from 'ink';
-import {runAgent} from '../agent/loop.js';
-import type {AgentEvent, AgentStatus, ChatItem} from '../agent/types.js';
+import {createTokenUsage, type AgentEvent, type AgentStatus, type ChatItem, type TokenUsage} from '../agent/session-types.js';
 import {
   absolutePathCandidates,
   firstDirectory,
   isDirectory,
+  parseNewSessionCommand,
   parseWorkspaceCommand
 } from '../utils/workspace.js';
 import {ChatPanel} from './ChatPanel.js';
 import {InputBox} from './InputBox.js';
 import {StatusBar} from './StatusBar.js';
 import type {TranscriptItem} from './transcript.js';
+import {useAgentSession} from './useAgentSession.js';
 
 type Props = {
   cwd: string;
@@ -23,6 +24,7 @@ export function App({cwd}: Props) {
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string>();
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>(() => createTokenUsage());
 
   const appendMessage = useCallback((item: ChatItem) => {
     setItems((current) => [...current, {type: 'message', item}]);
@@ -92,21 +94,41 @@ export function App({cwd}: Props) {
             )
           );
           break;
+        case 'token_usage':
+          setTokenUsage((current) => ({
+            prompt: current.prompt + event.usage.prompt,
+            completion: current.completion + event.usage.completion,
+            total: current.total + event.usage.total
+          }));
+          break;
       }
     },
     [appendMessage, updateStatus, updateStreamingAssistant]
   );
 
+  const {clearSession, runTurn} = useAgentSession({onEvent});
+
+  const resetSession = useCallback(
+    (cwdForSession: string) => {
+      clearSession();
+      setItems([]);
+      setTokenUsage(createTokenUsage());
+      updateStatus('idle', cwdForSession);
+      appendMessage({role: 'system', content: '已开始新对话'});
+    },
+    [appendMessage, clearSession, updateStatus]
+  );
+
   const runInWorkspace = useCallback(
     (input: string, cwdForRun: string) => {
       updateStatus('thinking', cwdForRun);
-      void runAgent({cwd: cwdForRun, input, onEvent}).catch((error) => {
+      void runTurn(input, cwdForRun).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         updateStatus('error', message);
         appendMessage({role: 'assistant', content: message});
       });
     },
-    [appendMessage, onEvent, updateStatus]
+    [appendMessage, runTurn, updateStatus]
   );
 
   const switchWorkspace = useCallback(
@@ -134,6 +156,11 @@ export function App({cwd}: Props) {
 
   const submit = useCallback(
     (input: string) => {
+      if (parseNewSessionCommand(input)) {
+        resetSession(workspace);
+        return;
+      }
+
       const nextWorkspace = parseWorkspaceCommand(input);
       if (nextWorkspace) {
         void switchWorkspace(input, nextWorkspace);
@@ -164,7 +191,7 @@ export function App({cwd}: Props) {
         runInWorkspace(input, resolved);
       });
     },
-    [appendMessage, runInWorkspace, switchWorkspace, updateStatus, workspace]
+    [appendMessage, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
   );
 
   const busy = status === 'thinking' || status === 'running_tool';
@@ -179,7 +206,7 @@ export function App({cwd}: Props) {
         <ChatPanel items={items} />
       </Box>
       <Box flexDirection="column">
-        <StatusBar status={status} message={statusMessage} />
+        <StatusBar status={status} message={statusMessage} tokenUsage={tokenUsage} />
         <InputBox disabled={busy} onSubmit={submit} />
       </Box>
     </Box>

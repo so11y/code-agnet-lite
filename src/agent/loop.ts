@@ -6,14 +6,14 @@ import {llmPlan, llmReplan, updateStateFromRun} from './planner.js';
 import {ReActAgent} from './react-agent.js';
 import {routeReasoningMode} from './router.js';
 import {AgentSession} from './session.js';
-import type {AgentMessage, AgentOptions} from './types.js';
+import type {AgentMessage} from './session-types.js';
 
 class CodeAgent extends ReActAgent {
-  protected streamLlm(
+  protected async streamLlm(
     messages: AgentMessage[],
     onDelta: (delta: string) => void
   ): Promise<ChatCompletionAssistantMessageParam> {
-    return callLlmStream(messages, onDelta);
+    return callLlmStream(messages, this.session.streamOptions(onDelta));
   }
 
   protected findTool(name: string) {
@@ -54,13 +54,24 @@ async function runTotLoop(agent: CodeAgent, session: AgentSession): Promise<void
   }
 }
 
-export async function runAgent(options: AgentOptions): Promise<void> {
-  const session = new AgentSession(options);
-  const agent = new CodeAgent(options, session);
 
-  session.announceUser();
+export async function runAgentTurn(
+  session: AgentSession,
+  input: string,
+  cwd?: string
+): Promise<void> {
+  const targetCwd = cwd ?? session.cwd;
+  if (targetCwd !== session.cwd) {
+    session.setWorkspace(targetCwd);
+  }
+
+  session.appendUser(input);
+
+  const agent = new CodeAgent(session.options, session);
+
   session.status('thinking', '路由判断');
-  const route = await routeReasoningMode(options.input, session.cwd);
+  const route = await routeReasoningMode(input, session);
+  session.reasoningMode = route.mode;
 
   switch (route.mode) {
     case 'react':

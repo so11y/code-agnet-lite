@@ -3,7 +3,8 @@ import {withTimeout} from '../utils/async.js';
 import {parseToolArgs} from '../utils/openai-message.js';
 import {truncate} from '../utils/truncate.js';
 import {AgentSession} from './session.js';
-import type {AgentMessage, AgentOptions, AgentTool, ToolCallItem} from './types.js';
+import type {AgentMessage, AgentOptions, ToolCallItem} from './session-types.js';
+import type {AgentTool} from './types.js';
 
 export type AgentRunResult = {
   completed: boolean;
@@ -34,8 +35,6 @@ export abstract class ReActAgent {
   }
 
   private async runLoop(suppressTerminalStatus: boolean): Promise<AgentRunResult> {
-    this.session.announceUser();
-
     for (let step = 1; step <= this.maxSteps; step += 1) {
       this.session.status('thinking', `${step}/${this.maxSteps}`);
 

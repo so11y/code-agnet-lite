@@ -56,13 +56,16 @@ async function requestPlan(
   title: string,
   extraContext = ''
 ) {
-  const response = await callPlainLlm([
-    {role: 'system', content: buildPlanPrompt(mode)},
-    {
-      role: 'user',
-      content: joinSections(extraContext, formatStateContext(session), formatSessionTranscript(session.messages))
-    }
-  ]);
+  const response = await callPlainLlm(
+    [
+      {role: 'system', content: buildPlanPrompt(mode)},
+      {
+        role: 'user',
+        content: joinSections(extraContext, formatStateContext(session), formatSessionTranscript(session.messages))
+      }
+    ],
+    session.llmOptions()
+  );
 
   const text = extractAssistantText(response);
 
@@ -116,19 +119,22 @@ export async function updateStateFromRun(
 ) {
   session.status('thinking', '复盘');
   const runFailed = didRunFail(result, error);
-  const response = await callPlainLlm([
-    {role: 'system', content: REVIEW_TOT_PROMPT},
-    {
-      role: 'user',
-      content: joinSections(
-        '请对照运行记录，复盘当前假设是否正确。',
-        '运行结果：',
-        formatRunOutcome(result, error),
-        '会话记录：',
-        formatSessionTranscript(session.messages)
-      )
-    }
-  ]);
+  const response = await callPlainLlm(
+    [
+      {role: 'system', content: REVIEW_TOT_PROMPT},
+      {
+        role: 'user',
+        content: joinSections(
+          '请对照运行记录，复盘当前假设是否正确。',
+          '运行结果：',
+          formatRunOutcome(result, error),
+          '会话记录：',
+          formatSessionTranscript(session.messages)
+        )
+      }
+    ],
+    session.llmOptions()
+  );
 
   const text = extractAssistantText(response);
 

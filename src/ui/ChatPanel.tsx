@@ -1,6 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
-import type {ChatItem, ChatRole, ToolCallItem} from '../agent/types.js';
+import type {ChatItem, ChatRole, ToolCallItem} from '../agent/session-types.js';
 import {compactText} from '../utils/truncate.js';
 import type {TranscriptItem} from './transcript.js';
 

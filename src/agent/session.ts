@@ -4,13 +4,18 @@ import {messageText} from '../utils/openai-message.js';
 import {SYSTEM_PROMPT} from './prompt.js';
 import {
   createAgentState,
+  createTokenUsage,
   type AgentMessage,
-  type AgentOptions,
+  type AgentSessionOptions,
   type AgentState,
   type AgentStatus,
   type ChatRole,
+  type LlmOptions,
+  type LlmStreamOptions,
+  type ReasoningMode,
+  type TokenUsage,
   type ToolCallItem
-} from './types.js';
+} from './session-types.js';
 
 const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMessage => ({
   role: 'assistant',
@@ -20,18 +25,23 @@ const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMe
 
 export class AgentSession {
   cwd: string;
+  reasoningMode?: ReasoningMode;
   readonly messages: AgentMessage[];
   readonly state: AgentState;
-  private userAnnounced = false;
+  readonly tokenUsage: TokenUsage = createTokenUsage();
 
-  constructor(private readonly options: AgentOptions) {
+  constructor(readonly options: AgentSessionOptions) {
     this.cwd = options.cwd;
     this.state = createAgentState();
     this.messages = [
       {role: 'system', content: SYSTEM_PROMPT},
-      {role: 'system', content: `当前工作区：${options.cwd}`},
-      {role: 'user', content: options.input}
+      {role: 'system', content: `当前工作区：${options.cwd}`}
     ];
+  }
+
+  appendUser(content: string) {
+    this.messages.push({role: 'user', content});
+    this.say('user', content);
   }
 
   buildStateMessages(): AgentMessage[] {
@@ -99,6 +109,21 @@ export class AgentSession {
     this.state.noProgress += 1;
   }
 
+  recordTokenUsage(usage: TokenUsage) {
+    this.tokenUsage.prompt += usage.prompt;
+    this.tokenUsage.completion += usage.completion;
+    this.tokenUsage.total += usage.total;
+    this.options.onEvent({type: 'token_usage', usage});
+  }
+
+  llmOptions(): LlmOptions {
+    return {session: this};
+  }
+
+  streamOptions(onDelta: (delta: string) => void): LlmStreamOptions {
+    return {session: this, onDelta};
+  }
+
   status(status: AgentStatus, message?: string) {
     this.options.onEvent({type: 'status', status, message});
   }
@@ -129,15 +154,6 @@ export class AgentSession {
     }
   }
 
-  announceUser() {
-    if (this.userAnnounced) {
-      return;
-    }
-
-    this.userAnnounced = true;
-    this.say('user', this.options.input);
-  }
-
   addAssistant(message: ChatCompletionAssistantMessageParam) {
     this.commitAssistant(message, false);
   }
@@ -161,4 +177,8 @@ export class AgentSession {
     this.cwd = cwd;
     this.options.onEvent({type: 'workspace', cwd});
   }
+}
+
+export function createAgentSession(options: AgentSessionOptions): AgentSession {
+  return new AgentSession(options);
 }

@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {parseAssistantJson} from '../utils/openai-message.js';
 import {callPlainLlm} from './llm.js';
 import {ROUTER_PROMPT} from './prompt.js';
+import type {AgentSession} from './session.js';
 
 const routeSchema = z.object({
   mode: z.enum(['react', 'tot']),
@@ -12,14 +13,17 @@ const routeSchema = z.object({
 export type ReasoningRoute = z.infer<typeof routeSchema>;
 export type ReasoningMode = ReasoningRoute['mode'];
 
-export async function routeReasoningMode(input: string, cwd: string): Promise<ReasoningRoute> {
-  const response = await callPlainLlm([
-    {role: 'system', content: ROUTER_PROMPT},
-    {
-      role: 'user',
-      content: `当前工作区：${cwd}\n\n用户请求：\n${input}`
-    }
-  ]);
+export async function routeReasoningMode(input: string, session: AgentSession): Promise<ReasoningRoute> {
+  const response = await callPlainLlm(
+    [
+      {role: 'system', content: ROUTER_PROMPT},
+      {
+        role: 'user',
+        content: `当前工作区：${session.cwd}\n\n用户请求：\n${input}`
+      }
+    ],
+    session.llmOptions()
+  );
 
   try {
     const parsed = parseAssistantJson(response, routeSchema);

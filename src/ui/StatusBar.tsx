@@ -1,11 +1,13 @@
 import React from 'react';
 import {Box, Text} from 'ink';
-import type {AgentStatus} from '../agent/types.js';
+import Spinner from 'ink-spinner';
+import type {AgentStatus, TokenUsage} from '../agent/session-types.js';
 import {compactText} from '../utils/truncate.js';
 
 type Props = {
   status: AgentStatus;
   message?: string;
+  tokenUsage?: TokenUsage;
 };
 
 const statusColor = {
@@ -35,10 +37,33 @@ function formatStatus(status: AgentStatus, message?: string): string {
   return `${label} · ${detail}`;
 }
 
-export function StatusBar({status, message}: Props) {
+function formatTokenUsage(usage: TokenUsage): string {
+  const total = usage.total.toLocaleString('en-US');
+  const prompt = usage.prompt.toLocaleString('en-US');
+  const completion = usage.completion.toLocaleString('en-US');
+
+  return `${total} tokens (in ${prompt} / out ${completion})`;
+}
+
+export function StatusBar({status, message, tokenUsage}: Props) {
+  const busy = status === 'thinking' || status === 'running_tool';
+  const color = statusColor[status];
+  const text = formatStatus(status, message);
+
   return (
-    <Box paddingX={1}>
-      <Text color={statusColor[status]}>{formatStatus(status, message)}</Text>
+    <Box paddingX={1} justifyContent="space-between">
+      <Text color={color}>
+        {busy ? (
+          <>
+            <Spinner type="dots" /> {text}
+          </>
+        ) : (
+          text
+        )}
+      </Text>
+      {tokenUsage && tokenUsage.total > 0 ? (
+        <Text color="gray">{formatTokenUsage(tokenUsage)}</Text>
+      ) : null}
     </Box>
   );
 }
