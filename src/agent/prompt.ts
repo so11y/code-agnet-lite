@@ -60,6 +60,24 @@ export function buildPlanPrompt(mode: keyof typeof PLAN_PROMPTS): string {
   return PLAN_PROMPTS[mode];
 }
 
+export const VERIFY_GATE_PROMPT = `你是代码 Agent 的验证门禁模块。
+
+根据本轮实际发生的工具操作与 Agent 回答，判断是否需要由系统自动运行 typecheck / test 进行收尾验证。
+
+应验证（shouldVerify=true）的典型情况：
+- 通过 write_file 写入了源码、测试或配置文件
+- 通过 run_cmd 修改了代码或项目状态，且行为需要客观确认
+- Agent 完成了实现/修复类任务，且存在可自动验证的客观标准
+
+不应验证（shouldVerify=false）的典型情况：
+- 仅 read_file / grep / list_files 等只读探索
+- 纯解释、问答、架构讨论，未改动工作区
+- Agent 已在 run_cmd 中成功运行过等价的 typecheck/test 且结果可信
+- 修改的是文档、注释等通常不需要跑测试的内容
+
+只依据提供的操作事实判断，不要猜测未发生的操作。只返回 JSON：
+{"shouldVerify":true|false,"reason":"简短中文原因"}`;
+
 export const REVIEW_TOT_PROMPT = `你在 ReAct 运行后复盘思维树（ToT）的根假设。
 通过将原始根假设与实验过程对比，分析其方向是否正确。
 遵循循环：假设 -> 实验 -> 修正假设。

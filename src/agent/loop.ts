@@ -7,6 +7,7 @@ import {ReActAgent} from './react-agent.js';
 import {routeReasoningMode} from './router.js';
 import {AgentSession} from './session.js';
 import type {AgentMessage} from './session-types.js';
+import {judgeShouldVerify, runVerifyAndFixLoop} from './verify.js';
 
 class CodeAgent extends ReActAgent {
   protected async streamLlm(
@@ -48,7 +49,6 @@ async function runTotLoop(agent: CodeAgent, session: AgentSession): Promise<void
     await updateStateFromRun(session, result, undefined, progressBefore);
 
     if (result.completed || session.state.confidence >= 0.9) {
-      session.status('done', '完成');
       return;
     }
   }
@@ -65,6 +65,7 @@ export async function runAgentTurn(
     session.setWorkspace(targetCwd);
   }
 
+  session.beginTurn(input);
   session.appendUser(input);
 
   const agent = new CodeAgent(session.options, session);
@@ -75,10 +76,19 @@ export async function runAgentTurn(
 
   switch (route.mode) {
     case 'react':
-      await agent.run();
-      return;
+      await agent.run({suppressTerminalStatus: true});
+      break;
     case 'tot':
       await runTotLoop(agent, session);
-      return;
+      break;
   }
+
+  const review = await judgeShouldVerify(session);
+
+  if (review.gate.shouldVerify) {
+    await runVerifyAndFixLoop(agent, session, review);
+    return;
+  }
+
+  session.status('done', '完成');
 }

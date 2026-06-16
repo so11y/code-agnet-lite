@@ -57,6 +57,8 @@ export type AgentState = {
   rejected: string[];
   visitedFiles: string[];
   searchedTerms: string[];
+  writtenFiles: string[];
+  executedCommands: string[];
   noProgress: number;
   confidence: number;
 };
@@ -68,10 +70,32 @@ export function createAgentState(): AgentState {
     rejected: [],
     visitedFiles: [],
     searchedTerms: [],
+    writtenFiles: [],
+    executedCommands: [],
     noProgress: 0,
     confidence: 0
   };
 }
+
+export type TurnOperations = {
+  writtenFiles: string[];
+  executedCommands: string[];
+};
+
+export type TurnContext = {
+  userInput: string;
+  operations: TurnOperations;
+  assistantText: string;
+};
+
+export type VerifyGate = {
+  shouldVerify: boolean;
+  reason: string;
+};
+
+export type TurnReview = TurnContext & {
+  gate: VerifyGate;
+};
 
 export type AgentSessionOptions = {
   cwd: string;

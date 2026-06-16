@@ -14,7 +14,9 @@ import {
   type LlmStreamOptions,
   type ReasoningMode,
   type TokenUsage,
-  type ToolCallItem
+  type ToolCallItem,
+  type TurnContext,
+  type TurnOperations
 } from './session-types.js';
 
 const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMessage => ({
@@ -29,6 +31,9 @@ export class AgentSession {
   readonly messages: AgentMessage[];
   readonly state: AgentState;
   readonly tokenUsage: TokenUsage = createTokenUsage();
+  private turnUserInput = '';
+  private turnWrittenFiles: string[] = [];
+  private turnExecutedCommands: string[] = [];
 
   constructor(readonly options: AgentSessionOptions) {
     this.cwd = options.cwd;
@@ -37,6 +42,12 @@ export class AgentSession {
       {role: 'system', content: SYSTEM_PROMPT},
       {role: 'system', content: `当前工作区：${options.cwd}`}
     ];
+  }
+
+  beginTurn(userInput: string) {
+    this.turnUserInput = userInput;
+    this.turnWrittenFiles = [];
+    this.turnExecutedCommands = [];
   }
 
   appendUser(content: string) {
@@ -84,6 +95,44 @@ export class AgentSession {
         String((input as {pattern: string}).pattern)
       ]);
     }
+
+    if (name === 'write_file' && input && typeof input === 'object' && 'path' in input) {
+      const path = String((input as {path: string}).path);
+      this.state.writtenFiles = union(this.state.writtenFiles, [path]);
+      this.turnWrittenFiles = union(this.turnWrittenFiles, [path]);
+    }
+
+    if (name === 'run_cmd' && input && typeof input === 'object' && 'command' in input) {
+      const command = String((input as {command: string}).command);
+      this.state.executedCommands = union(this.state.executedCommands, [command]);
+      this.turnExecutedCommands = union(this.turnExecutedCommands, [command]);
+    }
+  }
+
+  extractLastAssistantText(): string {
+    for (let index = this.messages.length - 1; index >= 0; index -= 1) {
+      const message = this.messages[index];
+      if (message.role === 'assistant') {
+        return messageText(message.content) ?? '';
+      }
+    }
+
+    return '';
+  }
+
+  refreshOperations(): TurnOperations {
+    return {
+      writtenFiles: [...this.turnWrittenFiles],
+      executedCommands: [...this.turnExecutedCommands]
+    };
+  }
+
+  collectTurnContext(): TurnContext {
+    return {
+      userInput: this.turnUserInput,
+      operations: this.refreshOperations(),
+      assistantText: this.extractLastAssistantText()
+    };
   }
 
   snapshotProgress() {
