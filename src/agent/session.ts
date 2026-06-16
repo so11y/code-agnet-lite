@@ -12,12 +12,13 @@ const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMe
 export class AgentSession {
   cwd: string;
   readonly messages: AgentMessage[];
+  private userAnnounced = false;
 
   constructor(private readonly options: AgentOptions) {
     this.cwd = options.cwd;
     this.messages = [
       {role: 'system', content: SYSTEM_PROMPT},
-      {role: 'system', content: `Current workspace: ${options.cwd}`},
+      {role: 'system', content: `当前工作区：${options.cwd}`},
       {role: 'user', content: options.input}
     ];
   }
@@ -30,12 +31,26 @@ export class AgentSession {
     this.options.onEvent({type: 'message', role, content});
   }
 
+  announceUser() {
+    if (this.userAnnounced) {
+      return;
+    }
+
+    this.userAnnounced = true;
+    this.say('user', this.options.input);
+  }
+
   addAssistant(message: ChatCompletionAssistantMessageParam) {
     this.messages.push(assistantMessage(message));
     const content = messageText(message.content);
     if (content) {
       this.say('assistant', content);
     }
+  }
+
+  addSystemNote(content: string) {
+    this.messages.push({role: 'system', content});
+    this.say('system', content);
   }
 
   startTool(call: ToolCallItem) {

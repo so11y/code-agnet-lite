@@ -43,6 +43,7 @@ export type AgentOptions = {
   input: string;
   onEvent(event: AgentEvent): void;
   maxSteps?: number;
+  maxTotRounds?: number;
 };
 
 export type AgentMessage = ChatCompletionMessageParam;

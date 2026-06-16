@@ -8,17 +8,62 @@ import {truncate} from '../utils/truncate.js';
 import {AgentSession} from './session.js';
 import type {AgentMessage, AgentOptions, AgentTool, ToolCallItem} from './types.js';
 
+export type AgentRunResult = {
+  completed: boolean;
+  steps: number;
+  reason: 'final_answer' | 'max_steps';
+};
+
+export type AgentLifecyclePhase = 'before' | 'after';
+
+export type AgentLifecycleContext = {
+  session: AgentSession;
+  result?: AgentRunResult;
+  error?: unknown;
+};
+
+export type AgentLifecycleHook = (context: AgentLifecycleContext) => Promise<void> | void;
+
 export abstract class ReActAgent {
   protected readonly maxSteps: number;
   protected readonly session: AgentSession;
+  private readonly lifecycleHooks = new Map<AgentLifecyclePhase, AgentLifecycleHook[]>();
 
-  constructor(protected readonly options: AgentOptions) {
+  constructor(protected readonly options: AgentOptions, session?: AgentSession) {
     this.maxSteps = options.maxSteps ?? 20;
-    this.session = new AgentSession(options);
+    this.session = session ?? new AgentSession(options);
   }
 
-  async run() {
-    this.session.say('user', this.options.input);
+  on(phase: AgentLifecyclePhase, hook: AgentLifecycleHook) {
+    const hooks = this.lifecycleHooks.get(phase) ?? [];
+    hooks.push(hook);
+    this.lifecycleHooks.set(phase, hooks);
+    return this;
+  }
+
+  async run(): Promise<AgentRunResult> {
+    await this.emitLifecycle('before');
+
+    let result: AgentRunResult | undefined;
+    let error: unknown;
+
+    try {
+      result = await this.runLoop();
+    } catch (caught) {
+      error = caught;
+    }
+
+    await this.emitLifecycle('after', {result, error});
+
+    if (error) {
+      throw error;
+    }
+
+    return result ?? {completed: false, steps: 0, reason: 'max_steps'};
+  }
+
+  private async runLoop(): Promise<AgentRunResult> {
+    this.session.announceUser();
 
     for (let step = 1; step <= this.maxSteps; step += 1) {
       this.session.status('thinking', `${step}/${this.maxSteps}`);
@@ -27,8 +72,8 @@ export abstract class ReActAgent {
       this.session.addAssistant(message);
 
       if (!message.tool_calls?.length) {
-        this.session.status('done', 'Done');
-        return;
+        this.session.status('done', '完成');
+        return {completed: true, steps: step, reason: 'final_answer'};
       }
 
       for (const toolCall of message.tool_calls) {
@@ -36,7 +81,8 @@ export abstract class ReActAgent {
       }
     }
 
-    this.session.status('error', `Stopped after ${this.maxSteps} steps without a final answer.`);
+    this.session.status('error', `已执行 ${this.maxSteps} 步，但仍未得到最终回答。`);
+    return {completed: false, steps: this.maxSteps, reason: 'max_steps'};
   }
 
   protected abstract callLlm(messages: AgentMessage[]): Promise<ChatCompletion>;
@@ -47,6 +93,17 @@ export abstract class ReActAgent {
     return 60_000;
   }
 
+  private async emitLifecycle(
+    phase: AgentLifecyclePhase,
+    context: Omit<AgentLifecycleContext, 'session'> = {}
+  ) {
+    const hooks = this.lifecycleHooks.get(phase) ?? [];
+
+    for (const hook of hooks) {
+      await hook({session: this.session, ...context});
+    }
+  }
+
   private async runTool(toolCall: ChatCompletionMessageToolCall) {
     const input = parseToolArgs(toolCall);
     const call: ToolCallItem = {id: toolCall.id, name: toolCall.function.name, input};
@@ -55,7 +112,7 @@ export abstract class ReActAgent {
     this.session.startTool(call);
 
     if (!tool) {
-      this.failTool(call.id, `Unknown tool: ${call.name}`);
+      this.failTool(call.id, `未知工具：${call.name}`);
       return;
     }
 

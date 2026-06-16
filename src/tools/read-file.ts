@@ -6,9 +6,9 @@ import {createTool} from './common.js';
 
 export const readFileTool = createTool({
   name: 'read_file',
-  description: 'Read a UTF-8 text file from the workspace.',
+  description: '读取工作区内的 UTF-8 文本文件。',
   schema: z.object({
-    path: z.string().describe('File path relative to the workspace root.')
+    path: z.string().describe('相对于工作区根目录的文件路径。')
   }),
   async execute(input, context) {
     const filePath = resolveInsideCwd(context.cwd, input.path);

@@ -11,8 +11,19 @@ export type CommandResult = {
 
 export function formatCommandOutput(result: CommandResult, timeoutMessage?: string) {
   const parts = [result.stdout, result.stderr, result.shortMessage].filter(Boolean);
-  const exit = result.exitCode ?? result.code ?? 'unknown';
+  const exit = result.exitCode ?? result.code ?? '未知';
   const timeout = result.timedOut && timeoutMessage ? `\n${timeoutMessage}` : '';
 
-  return truncate(`exit: ${exit}${timeout}\n${parts.join('\n') || 'No output.'}`);
+  return truncate(`退出码：${exit}${timeout}\n${parts.join('\n') || '无输出。'}`);
+}
+
+export async function runCommand(
+  operation: () => Promise<CommandResult>,
+  timeoutMessage?: string
+): Promise<string> {
+  try {
+    return formatCommandOutput(await operation(), timeoutMessage);
+  } catch (error) {
+    return formatCommandOutput(error as CommandResult, timeoutMessage);
+  }
 }

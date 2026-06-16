@@ -9,16 +9,30 @@ import type {AgentMessage} from './types.js';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 
-export async function callLlm(messages: AgentMessage[]) {
-  const client = new OpenAI({
+function createClient() {
+  return new OpenAI({
     apiKey: getRequiredOpenAiApiKey(),
     baseURL: getOpenAiBaseUrl()
   });
+}
 
-  return client.chat.completions.create({
+function createChatCompletion(messages: AgentMessage[], withTools: boolean) {
+  return createClient().chat.completions.create({
     model: getOpenAiModel(DEFAULT_MODEL),
     messages,
-    tools: tools.map((tool) => tool.openaiTool),
-    tool_choice: 'auto'
+    ...(withTools
+      ? {
+          tools: tools.map((tool) => tool.openaiTool),
+          tool_choice: 'auto' as const
+        }
+      : {})
   });
+}
+
+export async function callLlm(messages: AgentMessage[]) {
+  return createChatCompletion(messages, true);
+}
+
+export async function callPlainLlm(messages: AgentMessage[]) {
+  return createChatCompletion(messages, false);
 }

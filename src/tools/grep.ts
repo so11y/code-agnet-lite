@@ -2,29 +2,20 @@ import {execa} from 'execa';
 import {z} from 'zod';
 import {formatCommandOutput, type CommandResult} from '../utils/command-output.js';
 import {truncate} from '../utils/truncate.js';
-import {createTool} from './common.js';
-
-const defaultIgnoreGlobs = [
-  '!node_modules/**',
-  '!dist/**',
-  '!build/**',
-  '!out/**',
-  '!coverage/**',
-  '!.git/**'
-];
+import {createTool, RG_IGNORE_GLOBS} from './common.js';
 
 export const grepTool = createTool({
   name: 'grep',
-  description: 'Search workspace text using ripgrep.',
+  description: '使用 ripgrep 在工作区中搜索文本。',
   schema: z.object({
-    pattern: z.string().describe('Ripgrep search pattern.'),
-    glob: z.string().optional().describe('Optional glob filter, for example src/**/*.ts.'),
-    timeoutMs: z.number().optional().describe('Optional timeout in milliseconds. Defaults to 10000.')
+    pattern: z.string().describe('ripgrep 搜索模式。'),
+    glob: z.string().optional().describe('可选 glob 过滤，例如 src/**/*.ts。'),
+    timeoutMs: z.number().optional().describe('可选超时时间（毫秒），默认 10000。')
   }),
   async execute(input, context) {
     const args = ['--line-number', '--color', 'never', '--no-messages', '--max-filesize', '2M'];
 
-    for (const ignore of defaultIgnoreGlobs) {
+    for (const ignore of RG_IGNORE_GLOBS) {
       args.push('--glob', ignore);
     }
 
@@ -42,16 +33,16 @@ export const grepTool = createTool({
       });
 
       if (result.exitCode === 1) {
-        return 'No matches.';
+        return '未找到匹配项。';
       }
 
       if (result.exitCode !== 0) {
-        return formatCommandOutput(result, 'Timed out while searching.');
+        return formatCommandOutput(result, '搜索超时。');
       }
 
       return truncate(result.stdout);
     } catch (error) {
-      return formatCommandOutput(error as CommandResult, 'Timed out while searching.');
+      return formatCommandOutput(error as CommandResult, '搜索超时。');
     }
   }
 });

@@ -6,15 +6,15 @@ import {createTool} from './common.js';
 
 export const writeFileTool = createTool({
   name: 'write_file',
-  description: 'Write a UTF-8 text file inside the workspace. This replaces the whole file.',
+  description: '写入工作区内的 UTF-8 文本文件，会覆盖整个文件。',
   schema: z.object({
-    path: z.string().describe('File path relative to the workspace root.'),
-    content: z.string().describe('Complete new file content.')
+    path: z.string().describe('相对于工作区根目录的文件路径。'),
+    content: z.string().describe('完整的新文件内容。')
   }),
   async execute(input, context) {
     const filePath = resolveInsideCwd(context.cwd, input.path);
     await mkdir(path.dirname(filePath), {recursive: true});
     await writeFile(filePath, input.content, 'utf8');
-    return `Wrote ${input.content.length} chars to ${input.path}`;
+    return `已写入 ${input.content.length} 个字符到 ${input.path}`;
   }
 });

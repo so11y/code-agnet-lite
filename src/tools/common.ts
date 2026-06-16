@@ -1,6 +1,17 @@
 import type {AgentTool} from '../agent/types.js';
 import {z} from 'zod';
 
+export const DEFAULT_IGNORE_GLOBS = [
+  'node_modules/**',
+  'dist/**',
+  'build/**',
+  'out/**',
+  'coverage/**',
+  '.git/**'
+] as const;
+
+export const RG_IGNORE_GLOBS = DEFAULT_IGNORE_GLOBS.map((glob) => `!${glob}`);
+
 type JsonSchemaObject = {
   type: 'object';
   properties: Record<string, unknown>;

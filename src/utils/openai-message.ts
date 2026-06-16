@@ -1,8 +1,11 @@
 import type {
   ChatCompletion,
   ChatCompletionAssistantMessageParam,
+  ChatCompletionMessageParam,
   ChatCompletionMessageToolCall
 } from 'openai/resources/chat/completions';
+import {z} from 'zod';
+import {parseJsonObject} from './json-output.js';
 import {truncate} from './truncate.js';
 
 export function messageText(content: ChatCompletionAssistantMessageParam['content']) {
@@ -24,7 +27,7 @@ export function parseToolArgs(toolCall: ChatCompletionMessageToolCall) {
 export function getAssistantMessage(response: ChatCompletion) {
   if (!Array.isArray(response.choices)) {
     throw new Error(
-      `LLM response is not OpenAI-compatible: missing choices array. Raw response: ${truncate(
+      `LLM 响应不符合 OpenAI 格式：缺少 choices 数组。原始响应：${truncate(
         JSON.stringify(response)
       )}`
     );
@@ -32,8 +35,42 @@ export function getAssistantMessage(response: ChatCompletion) {
 
   const message = response.choices[0]?.message;
   if (!message) {
-    throw new Error(`Model returned no assistant message. Raw response: ${truncate(JSON.stringify(response))}`);
+    throw new Error(`模型未返回 assistant 消息。原始响应：${truncate(JSON.stringify(response))}`);
   }
 
   return message;
+}
+
+export function extractAssistantText(response: ChatCompletion): string {
+  return messageText(getAssistantMessage(response).content) ?? '';
+}
+
+export function parseAssistantJson<T extends z.ZodTypeAny>(
+  response: ChatCompletion,
+  schema: T
+): z.infer<T> {
+  return schema.parse(parseJsonObject(extractAssistantText(response)));
+}
+
+export function agentMessageText(message: ChatCompletionMessageParam): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+
+  if (message.content) {
+    return JSON.stringify(message.content);
+  }
+
+  if ('tool_calls' in message && message.tool_calls?.length) {
+    return `工具调用：${message.tool_calls.map((call) => call.function.name).join('、')}`;
+  }
+
+  return '';
+}
+
+export function formatSessionTranscript(messages: ChatCompletionMessageParam[]): string {
+  return messages
+    .map((message) => `${message.role}: ${agentMessageText(message)}`)
+    .filter((line) => line.trim())
+    .join('\n');
 }

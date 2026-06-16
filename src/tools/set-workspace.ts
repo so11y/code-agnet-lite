@@ -5,18 +5,18 @@ import {createTool} from './common.js';
 
 export const setWorkspaceTool = createTool({
   name: 'set_workspace',
-  description: 'Change the current workspace directory for subsequent tool calls.',
+  description: '切换后续工具调用的当前工作区目录。',
   schema: z.object({
-    cwd: z.string().describe('Absolute or relative directory path to switch to.')
+    cwd: z.string().describe('要切换到的绝对或相对目录路径。')
   }),
   async execute(input, context) {
     const resolved = path.resolve(context.cwd, input.cwd);
 
     if (!(await isDirectory(resolved))) {
-      throw new Error(`Workspace is not a directory: ${resolved}`);
+      throw new Error(`工作区不是有效目录：${resolved}`);
     }
 
     context.setCwd(resolved);
-    return `Workspace changed to ${resolved}`;
+    return `工作区已切换至 ${resolved}`;
   }
 });

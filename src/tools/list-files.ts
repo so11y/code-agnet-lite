@@ -1,22 +1,22 @@
 import fg from 'fast-glob';
 import {z} from 'zod';
 import {truncate} from '../utils/truncate.js';
-import {createTool} from './common.js';
+import {createTool, DEFAULT_IGNORE_GLOBS} from './common.js';
 
 export const listFilesTool = createTool({
   name: 'list_files',
-  description: 'List files in the workspace using a glob pattern.',
+  description: '使用 glob 模式列出工作区中的文件。',
   schema: z.object({
-    pattern: z.string().optional().describe('Glob pattern. Defaults to **/*.')
+    pattern: z.string().optional().describe('glob 模式，默认为 **/*。')
   }),
   async execute(input, context) {
     const files = await fg(input.pattern ?? '**/*', {
       cwd: context.cwd,
       onlyFiles: true,
       dot: true,
-      ignore: ['node_modules/**', 'dist/**', '.git/**']
+      ignore: [...DEFAULT_IGNORE_GLOBS]
     });
 
-    return truncate(files.join('\n') || 'No files found.');
+    return truncate(files.join('\n') || '未找到文件。');
   }
 });
