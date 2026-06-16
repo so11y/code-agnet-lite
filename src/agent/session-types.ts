@@ -58,6 +58,7 @@ export type AgentState = {
   visitedFiles: string[];
   searchedTerms: string[];
   writtenFiles: string[];
+  deletedFiles: string[];
   executedCommands: string[];
   noProgress: number;
   confidence: number;
@@ -71,6 +72,7 @@ export function createAgentState(): AgentState {
     visitedFiles: [],
     searchedTerms: [],
     writtenFiles: [],
+    deletedFiles: [],
     executedCommands: [],
     noProgress: 0,
     confidence: 0
@@ -79,6 +81,7 @@ export function createAgentState(): AgentState {
 
 export type TurnOperations = {
   writtenFiles: string[];
+  deletedFiles: string[];
   executedCommands: string[];
 };
 

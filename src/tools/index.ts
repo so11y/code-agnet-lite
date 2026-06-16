@@ -1,4 +1,5 @@
 import type {AgentTool} from '../agent/types.js';
+import {deleteFileTool} from './delete-file.js';
 import {grepTool} from './grep.js';
 import {listFilesTool} from './list-files.js';
 import {readFileTool} from './read-file.js';
@@ -9,6 +10,7 @@ import {writeFileTool} from './write-file.js';
 export const tools: AgentTool[] = [
   readFileTool,
   writeFileTool,
+  deleteFileTool,
   grepTool,
   listFilesTool,
   runCmdTool,

@@ -25,7 +25,7 @@ const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMe
   tool_calls: message.tool_calls
 });
 
-type StateListKey = 'visitedFiles' | 'searchedTerms' | 'writtenFiles' | 'executedCommands';
+type StateListKey = 'visitedFiles' | 'searchedTerms' | 'writtenFiles' | 'deletedFiles' | 'executedCommands';
 
 type ToolTrack = {
   stateKey: StateListKey;
@@ -37,6 +37,7 @@ const TOOL_TRACKS: Record<string, ToolTrack> = {
   read_file: {stateKey: 'visitedFiles', field: 'path'},
   grep: {stateKey: 'searchedTerms', field: 'pattern'},
   write_file: {stateKey: 'writtenFiles', field: 'path', turnKey: 'writtenFiles'},
+  delete_file: {stateKey: 'deletedFiles', field: 'path', turnKey: 'deletedFiles'},
   run_cmd: {stateKey: 'executedCommands', field: 'command', turnKey: 'executedCommands'}
 };
 
@@ -55,7 +56,7 @@ export class AgentSession {
   readonly state: AgentState;
   readonly tokenUsage: TokenUsage = createTokenUsage();
   private turnUserInput = '';
-  private turnOps: TurnOperations = {writtenFiles: [], executedCommands: []};
+  private turnOps: TurnOperations = {writtenFiles: [], deletedFiles: [], executedCommands: []};
 
   constructor(readonly options: AgentSessionOptions) {
     this.cwd = options.cwd;
@@ -68,7 +69,7 @@ export class AgentSession {
 
   beginTurn(userInput: string) {
     this.turnUserInput = userInput;
-    this.turnOps = {writtenFiles: [], executedCommands: []};
+    this.turnOps = {writtenFiles: [], deletedFiles: [], executedCommands: []};
   }
 
   appendUser(content: string) {
@@ -138,6 +139,7 @@ export class AgentSession {
   refreshOperations(): TurnOperations {
     return {
       writtenFiles: [...this.turnOps.writtenFiles],
+      deletedFiles: [...this.turnOps.deletedFiles],
       executedCommands: [...this.turnOps.executedCommands]
     };
   }

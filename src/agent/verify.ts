@@ -11,7 +11,7 @@ import {llmReplan} from './planner.js';
 import {VERIFY_GATE_PROMPT} from './prompt.js';
 import type {ReActAgent} from './react-agent.js';
 import type {AgentSession} from './session.js';
-import type {TurnContext, TurnReview, VerifyGate} from './session-types.js';
+import type {TurnContext, TurnOperations, TurnReview, VerifyGate} from './session-types.js';
 
 export type VerifyResult = {
   command: string;
@@ -31,6 +31,9 @@ function formatTurnContextForGate(context: TurnContext): string {
   const writtenFiles = context.operations.writtenFiles.length
     ? formatList('write_file 写入的文件：', context.operations.writtenFiles)
     : 'write_file 写入的文件：（无）';
+  const deletedFiles = context.operations.deletedFiles.length
+    ? formatList('delete_file 删除的文件：', context.operations.deletedFiles)
+    : 'delete_file 删除的文件：（无）';
   const executedCommands = context.operations.executedCommands.length
     ? formatList('run_cmd 执行的命令：', context.operations.executedCommands)
     : 'run_cmd 执行的命令：（无）';
@@ -38,6 +41,7 @@ function formatTurnContextForGate(context: TurnContext): string {
   return [
     `用户请求：\n${context.userInput}`,
     writtenFiles,
+    deletedFiles,
     executedCommands,
     `Agent 最终回答：\n${context.assistantText || '（无文本回答）'}`
   ].join('\n\n');
@@ -51,9 +55,16 @@ function fallbackVerifyGate(context: TurnContext): VerifyGate {
     };
   }
 
+  if (context.operations.deletedFiles.length > 0) {
+    return {
+      shouldVerify: true,
+      reason: `本轮删除了 ${context.operations.deletedFiles.length} 个文件（${context.operations.deletedFiles.join('、')}）`
+    };
+  }
+
   return {
     shouldVerify: false,
-    reason: '未检测到文件写入，默认跳过自动验证'
+    reason: '未检测到文件变更，默认跳过自动验证'
   };
 }
 
@@ -167,10 +178,10 @@ export function buildFinalFailureReport(options: {
   failures: VerifyResult[];
   fixRounds: number;
   replans: number;
-  writtenFiles: string[];
+  operations: TurnOperations;
   gate: VerifyGate;
 }): string {
-  const {failures, fixRounds, replans, writtenFiles, gate} = options;
+  const {failures, fixRounds, replans, operations, gate} = options;
 
   const failureBlocks = failures.map(
     (failure) =>
@@ -192,9 +203,15 @@ export function buildFinalFailureReport(options: {
     '### 可能原因',
     ...reasons.map((reason) => `- ${reason}`),
     '',
-    writtenFiles.length > 0
-      ? `### 本轮已修改文件\n${writtenFiles.map((file) => `- ${file}`).join('\n')}`
-      : '### 本轮已修改文件\n（未检测到 write_file 调用）',
+    operations.writtenFiles.length > 0
+      ? `### 本轮已写入文件\n${operations.writtenFiles.map((file) => `- ${file}`).join('\n')}`
+      : '',
+    operations.deletedFiles.length > 0
+      ? `### 本轮已删除文件\n${operations.deletedFiles.map((file) => `- ${file}`).join('\n')}`
+      : '',
+    operations.writtenFiles.length === 0 && operations.deletedFiles.length === 0
+      ? '### 本轮文件变更\n（未检测到 write_file / delete_file 调用）'
+      : '',
     '',
     '### 建议下一步',
     '- 根据上方错误手动修复后，重新发起请求',
@@ -251,7 +268,7 @@ export async function runVerifyAndFixLoop(
         failures,
         fixRounds: MAX_FIX_ROUNDS,
         replans,
-        writtenFiles: session.refreshOperations().writtenFiles,
+        operations: session.refreshOperations(),
         gate: review.gate
       });
       session.status('error', '验证未通过，已达最大尝试次数');
