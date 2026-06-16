@@ -28,6 +28,27 @@ export function App({cwd}: Props) {
     setItems((current) => [...current, {type: 'message', item}]);
   }, []);
 
+  const updateStreamingAssistant = useCallback((update: (item: ChatItem) => ChatItem) => {
+    setItems((current) => {
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        const entry = current[index];
+        if (
+          entry.type === 'message' &&
+          entry.item.role === 'assistant' &&
+          entry.item.streaming
+        ) {
+          return [
+            ...current.slice(0, index),
+            {type: 'message', item: update(entry.item)},
+            ...current.slice(index + 1)
+          ];
+        }
+      }
+
+      return current;
+    });
+  }, []);
+
   const updateStatus = useCallback((next: AgentStatus, message?: string) => {
     setStatus(next);
     setStatusMessage(message);
@@ -42,10 +63,22 @@ export function App({cwd}: Props) {
         case 'message':
           appendMessage({role: event.role, content: event.content});
           break;
+        case 'message_start':
+          appendMessage({role: event.role, content: '', streaming: true});
+          break;
+        case 'message_delta':
+          updateStreamingAssistant((item) => ({
+            ...item,
+            content: `${item.content}${event.delta}`
+          }));
+          break;
+        case 'message_end':
+          updateStreamingAssistant((item) => ({...item, streaming: false}));
+          break;
         case 'workspace':
           setWorkspace(event.cwd);
           setStatusMessage(event.cwd);
-          appendMessage({role: 'system', content: `Workspace: ${event.cwd}`});
+          appendMessage({role: 'system', content: `工作区：${event.cwd}`});
           break;
         case 'tool_start':
           setItems((current) => [...current, {type: 'tool', item: event.call}]);
@@ -61,7 +94,7 @@ export function App({cwd}: Props) {
           break;
       }
     },
-    [appendMessage, updateStatus]
+    [appendMessage, updateStatus, updateStreamingAssistant]
   );
 
   const runInWorkspace = useCallback(
@@ -84,12 +117,12 @@ export function App({cwd}: Props) {
 
       try {
         if (!(await isDirectory(resolved))) {
-          throw new Error(`Workspace is not a directory: ${resolved}`);
+          throw new Error(`工作区不是目录：${resolved}`);
         }
 
         setWorkspace(resolved);
         updateStatus('idle', resolved);
-        appendMessage({role: 'system', content: `Workspace: ${resolved}`});
+        appendMessage({role: 'system', content: `工作区：${resolved}`});
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         updateStatus('error', message);
@@ -116,7 +149,7 @@ export function App({cwd}: Props) {
       updateStatus('thinking', paths[0]);
       void firstDirectory(paths).then((resolved) => {
         if (!resolved) {
-          const message = `Workspace path does not exist or is not a directory: ${paths[0]}`;
+          const message = `工作区路径不存在或不是目录：${paths[0]}`;
           updateStatus('error', message);
           appendMessage({role: 'user', content: input});
           appendMessage({role: 'system', content: message});
@@ -125,7 +158,7 @@ export function App({cwd}: Props) {
 
         if (resolved !== workspace) {
           setWorkspace(resolved);
-          appendMessage({role: 'system', content: `Workspace: ${resolved}`});
+          appendMessage({role: 'system', content: `工作区：${resolved}`});
         }
 
         runInWorkspace(input, resolved);

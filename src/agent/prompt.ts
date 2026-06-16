@@ -1,3 +1,5 @@
+import {formatSchemaForPrompt, planSchema, reviewSchema} from './planner-schemas.js';
+
 export const SYSTEM_PROMPT = `你是一个代码 Agent。
 
 规则：
@@ -20,24 +22,43 @@ export const ROUTER_PROMPT = `你是代码 Agent 的任务路由器。
 不确定时默认选择 react。只返回 JSON：
 {"mode":"react"|"tot","confidence":0.0-1.0,"reason":"简短中文原因"}`;
 
-export const ROOT_TOT_PROMPT = `你是代码 Agent 的思维树（ToT）规划模块。
+const PLAN_COMMON_RULES = `- 不要调用工具。
+- 不要暴露内部思维链。
+- 将输出视为假设，而非已验证事实。`;
+
+const PLAN_JSON_SCHEMA = formatSchemaForPrompt(planSchema);
+const REVIEW_JSON_SCHEMA = formatSchemaForPrompt(reviewSchema);
+
+const PLAN_ROOT_PROMPT = `你是代码 Agent 的思维树（ToT）规划模块。
 阅读当前会话上下文，在内部探索若干可行的实现路径，然后只返回最佳工作假设。
 
 规则：
-- 不要调用工具。
-- 不要暴露内部思维链或被放弃的分支。
-- 将你的输出视为假设，而非已验证事实。
+${PLAN_COMMON_RULES}
 - 优先选择符合现有代码结构的保守方案。
 - ReAct 执行器在依赖此计划前，必须通过读取文件、搜索代码或运行命令验证关键假设。
 
-只返回 JSON：
-{
-  "summary": "一句简洁的中文摘要",
-  "chosenPlan": "最终建议方向",
-  "steps": ["具体执行步骤"],
-  "risks": ["重要风险、假设或取舍"],
-  "verification": ["ReAct 执行器必须执行的检查项"]
-}`;
+只返回 JSON，并符合以下 JSON Schema（字段说明见 description）：
+${PLAN_JSON_SCHEMA}`;
+
+const PLAN_REPLAN_PROMPT = `你是代码 Agent 的换思路规划模块。
+先前假设进展不足或已被拒绝，请给出明显不同的新工作假设。
+
+规则：
+${PLAN_COMMON_RULES}
+- 不要重复已拒绝方向。
+- 优先探索尚未搜索的文件、术语或实现路径。
+
+只返回 JSON，并符合以下 JSON Schema（字段说明见 description）：
+${PLAN_JSON_SCHEMA}`;
+
+const PLAN_PROMPTS = {
+  root: PLAN_ROOT_PROMPT,
+  replan: PLAN_REPLAN_PROMPT
+} as const;
+
+export function buildPlanPrompt(mode: keyof typeof PLAN_PROMPTS): string {
+  return PLAN_PROMPTS[mode];
+}
 
 export const REVIEW_TOT_PROMPT = `你在 ReAct 运行后复盘思维树（ToT）的根假设。
 通过将原始根假设与实验过程对比，分析其方向是否正确。
@@ -47,16 +68,7 @@ export const REVIEW_TOT_PROMPT = `你在 ReAct 运行后复盘思维树（ToT）
 - 不要调用工具。
 - 不要暴露内部思维链。
 - 当运行失败、达到最大步数、与根假设矛盾，或需要明显不同策略时，将 directionCorrect 设为 false。
-- 若 directionCorrect=false，提供修正后的假设和具体下一步。
+- 若 directionCorrect=false，填写 rejected 与 hypotheses。
 
-只返回 JSON：
-{
-  "directionCorrect": true,
-  "summary": "一句简洁的中文复盘",
-  "rootHypothesis": "初始 ToT 假设是什么",
-  "experimentResult": "执行过程中实际发生了什么",
-  "revisedHypothesis": "无需修正时留空",
-  "evidence": ["从对话记录中可观察到的证据"],
-  "nextSteps": ["需要修正时的后续行动"],
-  "verification": ["修正方向所需的检查项"]
-}`;
+只返回 JSON，并符合以下 JSON Schema（字段说明见 description）：
+${REVIEW_JSON_SCHEMA}`;

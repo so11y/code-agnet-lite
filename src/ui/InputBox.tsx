@@ -38,9 +38,18 @@ export function InputBox({disabled, onSubmit}: Props) {
   });
 
   return (
-    <Box borderStyle="single" borderColor={disabled ? 'gray' : 'green'} paddingX={1}>
-      <Text color="green">{'> '}</Text>
-      <Text>{disabled ? 'Agent is working...' : value || 'Type a task and press Enter'}</Text>
+    <Box borderStyle="round" borderColor={disabled ? 'gray' : 'cyan'} paddingX={1} minWidth={40}>
+      <Text color="gray">输入 </Text>
+      {disabled ? (
+        <Text color="gray">正在处理…</Text>
+      ) : value ? (
+        <>
+          <Text>{value}</Text>
+          <Text color="cyan">▌</Text>
+        </>
+      ) : (
+        <Text dimColor>请输入问题，按 Enter 发送</Text>
+      )}
     </Box>
   );
 }

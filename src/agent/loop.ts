@@ -1,15 +1,19 @@
-import type {ChatCompletion} from 'openai/resources/chat/completions';
+import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
+import {isEmpty} from 'lodash-es';
 import {toolsByName} from '../tools/index.js';
-import {callLlm} from './llm.js';
+import {callLlmStream} from './llm.js';
+import {llmPlan, llmReplan, updateStateFromRun} from './planner.js';
 import {ReActAgent} from './react-agent.js';
 import {routeReasoningMode} from './router.js';
 import {AgentSession} from './session.js';
-import {createTotPlannerContext, registerTotPlanner} from './tot-planner.js';
 import type {AgentMessage, AgentOptions} from './types.js';
 
 class CodeAgent extends ReActAgent {
-  protected callLlm(messages: AgentMessage[]): Promise<ChatCompletion> {
-    return callLlm(messages);
+  protected streamLlm(
+    messages: AgentMessage[],
+    onDelta: (delta: string) => void
+  ): Promise<ChatCompletionAssistantMessageParam> {
+    return callLlmStream(messages, onDelta);
   }
 
   protected findTool(name: string) {
@@ -17,65 +21,53 @@ class CodeAgent extends ReActAgent {
   }
 }
 
+async function runTotLoop(agent: CodeAgent, session: AgentSession): Promise<void> {
+  while (true) {
+    if (session.state.noProgress >= 2) {
+      await llmReplan(session);
+      session.state.noProgress = 0;
+    } else if (isEmpty(session.state.hypotheses)) {
+      await llmPlan(session);
+    }
+
+    const progressBefore = session.snapshotProgress();
+
+    let result;
+    try {
+      result = await agent.run({suppressTerminalStatus: true});
+    } catch (error) {
+      await updateStateFromRun(
+        session,
+        {completed: false, steps: 0, reason: 'max_steps'},
+        error,
+        progressBefore
+      );
+      throw error;
+    }
+
+    await updateStateFromRun(session, result, undefined, progressBefore);
+
+    if (result.completed || session.state.confidence >= 0.9) {
+      session.status('done', '完成');
+      return;
+    }
+  }
+}
+
 export async function runAgent(options: AgentOptions): Promise<void> {
   const session = new AgentSession(options);
+  const agent = new CodeAgent(options, session);
 
   session.announceUser();
   session.status('thinking', '路由判断');
   const route = await routeReasoningMode(options.input, session.cwd);
 
   switch (route.mode) {
-    case 'tot':
-      await runTotAgent(options, session);
-      return;
     case 'react':
-      await new CodeAgent(options, session).run();
-      break;
-  }
-}
-
-async function runTotAgent(options: AgentOptions, session: AgentSession) {
-  const context = createTotPlannerContext(options.maxTotRounds ?? 3);
-  let lastError: unknown;
-
-  while (context.round < context.maxRounds) {
-    context.round += 1;
-    context.shouldRetry = false;
-    context.exhausted = false;
-    lastError = undefined;
-
-    const agent = new CodeAgent(options, session);
-    registerTotPlanner(agent, session, context);
-
-    try {
       await agent.run();
-    } catch (error) {
-      lastError = error;
-    }
-
-    if (!context.shouldRetry) {
-      if (lastError) {
-        throw lastError;
-      }
-
-      if (context.exhausted) {
-        session.status('error', `ToT 已达到 ${context.maxRounds} 轮修正上限`);
-        return;
-      }
-
-      session.status('done', '完成');
       return;
-    }
-
-    session.status(
-      'thinking',
-      `ToT 修正后继续执行 ${context.round + 1}/${context.maxRounds}`
-    );
+    case 'tot':
+      await runTotLoop(agent, session);
+      return;
   }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  session.status('error', `ToT 已达到 ${context.maxRounds} 轮修正上限`);
 }

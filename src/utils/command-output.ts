@@ -1,3 +1,4 @@
+import {compact} from 'lodash-es';
 import {truncate} from './truncate.js';
 
 export type CommandResult = {
@@ -10,7 +11,7 @@ export type CommandResult = {
 };
 
 export function formatCommandOutput(result: CommandResult, timeoutMessage?: string) {
-  const parts = [result.stdout, result.stderr, result.shortMessage].filter(Boolean);
+  const parts = compact([result.stdout, result.stderr, result.shortMessage]);
   const exit = result.exitCode ?? result.code ?? '未知';
   const timeout = result.timedOut && timeoutMessage ? `\n${timeoutMessage}` : '';
 

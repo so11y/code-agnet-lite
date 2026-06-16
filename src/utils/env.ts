@@ -60,6 +60,6 @@ export function getOpenAiBaseUrl(): string | undefined {
   return baseUrl || undefined;
 }
 
-export function getOpenAiModel(defaultModel: string): string {
-  return process.env.OPENAI_MODEL?.trim() || defaultModel;
+export function getOpenAiModel(defaultModel?: string): string {
+  return process.env.OPENAI_MODEL?.trim() || defaultModel || '';
 }

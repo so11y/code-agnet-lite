@@ -1,5 +1,6 @@
 import {stat} from 'node:fs/promises';
 import path from 'node:path';
+import {compact} from 'lodash-es';
 
 export const parseWorkspaceCommand = (input: string) =>
   /^(?:\/(?:workspace|cwd)|cd)\s+(.+)$/i.exec(input.trim())?.[1]?.trim();
@@ -10,9 +11,9 @@ export function absolutePathCandidates(input: string) {
   );
   const bare = input.match(/[a-zA-Z]:[\\/][^\s"'<>|?*,.;!?]*/g) ?? [];
 
-  return [...quoted, ...bare]
-    .map((candidate) => candidate.replace(/[)\]}.!?]+$/g, ''))
-    .filter(Boolean);
+  return compact(
+    [...quoted, ...bare].map((candidate) => candidate.replace(/[)\]}.!?]+$/g, ''))
+  );
 }
 
 export async function isDirectory(targetPath: string) {

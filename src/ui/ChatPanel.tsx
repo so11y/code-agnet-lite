@@ -9,22 +9,22 @@ type Props = {
 };
 
 const roleMeta: Record<ChatRole, {label: string; color: 'cyan' | 'green' | 'gray' | 'yellow'}> = {
-  user: {label: 'You', color: 'cyan'},
-  assistant: {label: 'Agent', color: 'green'},
-  system: {label: 'System', color: 'gray'},
-  tool: {label: 'Tool', color: 'yellow'}
+  user: {label: '你', color: 'cyan'},
+  assistant: {label: '助手', color: 'green'},
+  system: {label: '系统', color: 'gray'},
+  tool: {label: '工具', color: 'yellow'}
 };
 
 function toolStatus(call: ToolCallItem) {
   if (call.error) {
-    return {label: 'failed', color: 'red' as const, detail: call.error};
+    return {label: '失败', color: 'red' as const, detail: call.error};
   }
 
   if (call.output) {
-    return {label: 'done', color: 'green' as const, detail: call.output};
+    return {label: '完成', color: 'green' as const, detail: call.output};
   }
 
-  return {label: 'running', color: 'yellow' as const};
+  return {label: '运行中', color: 'yellow' as const};
 }
 
 function ToolBubble({call}: {call: ToolCallItem}) {
@@ -34,7 +34,7 @@ function ToolBubble({call}: {call: ToolCallItem}) {
     <Box key={call.id} flexDirection="column" marginTop={1} paddingLeft={2}>
       <Text>
         <Text color={state.color}>{state.label}</Text>
-        <Text color="gray"> tool </Text>
+        <Text color="gray"> 工具 </Text>
         <Text color="yellow">{call.name}</Text>
         <Text color="gray"> {compactText(call.input)}</Text>
       </Text>
@@ -70,7 +70,10 @@ function MessageBubble({message}: {message: ChatItem}) {
         paddingX={1}
         width="90%"
       >
-        <Text wrap="wrap">{message.content}</Text>
+        <Text wrap="wrap">
+          {message.content}
+          {message.streaming ? <Text color="green">▌</Text> : null}
+        </Text>
       </Box>
     </Box>
   );
@@ -90,7 +93,7 @@ export function ChatPanel({items}: Props) {
     >
       {visible.length === 0 ? (
         <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <Text color="gray">Send a task to start chatting with the agent.</Text>
+          <Text color="gray">输入问题开始对话</Text>
         </Box>
       ) : (
         visible.map((entry, index) =>
