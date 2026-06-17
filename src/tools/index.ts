@@ -5,6 +5,7 @@ import {listFilesTool} from './list-files.js';
 import {readFileTool} from './read-file.js';
 import {runCmdTool} from './run-cmd.js';
 import {setWorkspaceTool} from './set-workspace.js';
+import {webSearchTool} from './web-search.js';
 import {writeFileTool} from './write-file.js';
 
 export const tools: AgentTool[] = [
@@ -12,6 +13,7 @@ export const tools: AgentTool[] = [
   writeFileTool,
   deleteFileTool,
   grepTool,
+  webSearchTool,
   listFilesTool,
   runCmdTool,
   setWorkspaceTool
