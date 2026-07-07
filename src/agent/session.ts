@@ -1,15 +1,21 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import {compact, isEmpty, union} from 'lodash-es';
+import {compact, union} from 'lodash-es';
 import {messageText} from '../utils/openai-message.js';
 import {SYSTEM_PROMPT} from './prompt.js';
 import {
-  createAgentState,
+  buildInjectedSnapshot,
+  createInjectedSnapshot,
+  diffInjectedSnapshot,
+  formatStateDelta
+} from './state-ai-view.js';
+import {
+  createInternalState,
   createTokenUsage,
   type AgentMessage,
   type AgentSessionOptions,
-  type AgentState,
   type AgentStatus,
   type ChatRole,
+  type InternalState,
   type LlmOptions,
   type LlmStreamOptions,
   type ReasoningMode,
@@ -53,14 +59,18 @@ export class AgentSession {
   cwd: string;
   reasoningMode?: ReasoningMode;
   readonly messages: AgentMessage[];
-  readonly state: AgentState;
+  /** 程序侧详细 state */
+  readonly state: InternalState;
   readonly tokenUsage: TokenUsage = createTokenUsage();
   private turnUserInput = '';
   private turnOps: TurnOperations = {writtenFiles: [], deletedFiles: [], executedCommands: []};
+  /** AiView：上次已注入 LLM 的投影 baseline */
+  private lastInjected_ = createInjectedSnapshot();
+  private deltaStep_ = 0;
 
   constructor(readonly options: AgentSessionOptions) {
     this.cwd = options.cwd;
-    this.state = createAgentState();
+    this.state = createInternalState();
     this.messages = [
       {role: 'system', content: SYSTEM_PROMPT},
       {role: 'system', content: `当前工作区：${options.cwd}`}
@@ -77,22 +87,21 @@ export class AgentSession {
     this.say('user', content);
   }
 
-  buildStateMessages(): AgentMessage[] {
-    const sections = compact([
-      this.state.facts.length ? `已知事实：\n${this.state.facts.join('\n')}` : '',
-      this.state.hypotheses.length ? `当前假设：\n${this.state.hypotheses.join('\n')}` : '',
-      this.state.rejected.length ? `已拒绝方向：\n${this.state.rejected.join('\n')}` : '',
-      this.state.visitedFiles.length ? `已访问文件：\n${this.state.visitedFiles.join('\n')}` : '',
-      this.state.searchedTerms.length ? `已搜索关键词：\n${this.state.searchedTerms.join('\n')}` : '',
-      `连续无进展：${this.state.noProgress}`,
-      `置信度：${this.state.confidence.toFixed(2)}`
-    ]);
-
-    if (isEmpty(sections)) {
-      return [];
+  flushStateDelta() {
+    const next = buildInjectedSnapshot(this.state, this.turnOps);
+    const delta = diffInjectedSnapshot(this.lastInjected_, next);
+    if (!delta) {
+      return;
     }
 
-    return [{role: 'system', content: sections.join('\n\n')}];
+    this.deltaStep_ += 1;
+    this.addSystemNote(formatStateDelta(this.deltaStep_, delta, this.state));
+    this.lastInjected_ = next;
+  }
+
+  buildLlmMessages(): AgentMessage[] {
+    this.flushStateDelta();
+    return this.messages;
   }
 
   applyHypotheses(hypotheses: string[]) {

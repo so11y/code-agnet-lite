@@ -51,7 +51,8 @@ export type AgentEvent =
   | {type: 'tool_end'; id: string; output?: string; error?: string}
   | {type: 'token_usage'; usage: TokenUsage};
 
-export type AgentState = {
+/** 程序侧详细账本，供调度、冲突检测、verify 等使用 */
+export type InternalState = {
   facts: string[];
   hypotheses: string[];
   rejected: string[];
@@ -64,7 +65,10 @@ export type AgentState = {
   confidence: number;
 };
 
-export function createAgentState(): AgentState {
+/** @deprecated 使用 InternalState */
+export type AgentState = InternalState;
+
+export function createInternalState(): InternalState {
   return {
     facts: [],
     hypotheses: [],
@@ -77,6 +81,10 @@ export function createAgentState(): AgentState {
     noProgress: 0,
     confidence: 0
   };
+}
+
+export function createAgentState(): InternalState {
+  return createInternalState();
 }
 
 export type TurnOperations = {

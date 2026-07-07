@@ -26,7 +26,7 @@ export abstract class ReActAgent {
   }
 
   protected buildLlmMessages(): AgentMessage[] {
-    return [...this.session.buildStateMessages(), ...this.session.messages];
+    return this.session.buildLlmMessages();
   }
 
   private async runLoop(): Promise<AgentRunResult> {
