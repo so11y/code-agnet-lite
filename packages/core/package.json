@@ -1,0 +1,23 @@
+{
+  "name": "@code-agent-lite/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@code-agent-lite/platform": "*",
+    "@code-agent-lite/shared": "*",
+    "@code-agent-lite/tools": "*",
+    "execa": "^9.5.2",
+    "lodash-es": "^4.18.1",
+    "openai": "^4.86.1",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.25.2"
+  }
+}

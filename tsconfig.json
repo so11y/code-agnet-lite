@@ -1,16 +1,10 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "jsx": "react-jsx",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "types": ["node"]
-  },
-  "include": ["src"]
+  "files": [],
+  "references": [
+    {"path": "packages/shared"},
+    {"path": "packages/platform"},
+    {"path": "packages/tools"},
+    {"path": "packages/core"},
+    {"path": "packages/cli"}
+  ]
 }

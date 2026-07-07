@@ -1,0 +1,20 @@
+{
+  "name": "@code-agent-lite/tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@code-agent-lite/platform": "*",
+    "@code-agent-lite/shared": "*",
+    "execa": "^9.5.2",
+    "fast-glob": "^3.3.3",
+    "zod": "^3.24.2"
+  }
+}
