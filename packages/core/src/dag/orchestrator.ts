@@ -1,5 +1,5 @@
 import type {AgentSession} from '../session.js';
-import {runDag} from './dag-scheduler.js';
+import {runDag} from './dag-promise-scheduler.js';
 import {llmPlanDag} from './dag-planner.js';
 import {createBlackboard} from './types.js';
 

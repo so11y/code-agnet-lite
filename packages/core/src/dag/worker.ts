@@ -8,7 +8,7 @@ import type {AgentEvent, AgentMessage, AgentSessionOptions} from '../session-typ
 import type {AgentTool} from '@code-agent-lite/tools';
 import type {Blackboard, TaskNode} from './types.js';
 import {createTaskOutput, type TaskOutput} from './types.js';
-import {ResourceManager} from './resource-manager.js';
+import type {ReleaseHandle, ResourceContext} from './resource-context.js';
 
 const EXPLORE_TOOLS = new Set(['read_file', 'grep', 'list_files', 'web_search']);
 const BLOCKED_EXPLORE_TOOLS = new Set(['write_file', 'delete_file', 'run_cmd', 'set_workspace']);
@@ -20,11 +20,13 @@ const WORKER_PROMPT = `${SYSTEM_PROMPT}
 上游结论仅供参考，关键判断仍需用工具验证。`;
 
 class WorkerCodeAgent extends ReActAgent {
+  readonly dynamicReleases: ReleaseHandle[] = [];
+
   constructor(
     options: AgentSessionOptions,
     session: AgentSession,
     private readonly readOnly: boolean,
-    private readonly resourceManager: ResourceManager,
+    private readonly resourceCtx: ResourceContext,
     private readonly nodeId: string
   ) {
     super(options, session);
@@ -54,11 +56,18 @@ class WorkerCodeAgent extends ReActAgent {
 
     switch (name) {
       case 'write_file':
-        return filePath ? this.resourceManager.recordDynamicWrite(this.nodeId, filePath) : true;
+        if (filePath) {
+          this.dynamicReleases.push(await this.resourceCtx.acquireWrite(filePath, this.nodeId));
+        }
+        return true;
       case 'delete_file':
-        return filePath ? this.resourceManager.recordDynamicDelete(this.nodeId, filePath) : true;
+        if (filePath) {
+          this.dynamicReleases.push(await this.resourceCtx.acquireWrite(filePath, this.nodeId));
+        }
+        return true;
       case 'run_cmd':
-        return this.resourceManager.tryAcquireCommand(this.nodeId);
+        this.dynamicReleases.push(await this.resourceCtx.acquireCommand(this.nodeId));
+        return true;
       case 'set_workspace':
         return false;
       default:
@@ -150,7 +159,7 @@ export async function runWorkerNode(
   node: TaskNode,
   blackboard: Blackboard,
   parentSession: AgentSession,
-  resourceManager: ResourceManager,
+  resourceCtx: ResourceContext,
   workerMaxSteps: number
 ): Promise<TaskOutput> {
   const workerSession = createWorkerSession(node, blackboard, parentSession.options, workerMaxSteps);
@@ -160,15 +169,19 @@ export async function runWorkerNode(
     {...parentSession.options, maxSteps: workerMaxSteps},
     workerSession,
     readOnly,
-    resourceManager,
+    resourceCtx,
     node.id
   );
 
   workerSession.appendUser(`[本节点目标]\n${node.goal}`);
-  const result = await agent.run();
+  try {
+    const result = await agent.run();
 
-  if (!result.completed) {
-    throw new Error(`Worker ${node.id} 未在 ${result.steps} 步内完成`);
+    if (!result.completed) {
+      throw new Error(`Worker ${node.id} 未在 ${result.steps} 步内完成`);
+    }
+  } finally {
+    agent.dynamicReleases.forEach((release) => release());
   }
 
   const summary = workerSession.extractLastAssistantText();
