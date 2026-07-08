@@ -2,10 +2,15 @@ import React from 'react';
 import {Box, Text} from 'ink';
 import type {ChatItem, ChatRole, ToolCallItem} from '@code-agent-lite/core';
 import {compactText} from '@code-agent-lite/shared';
+import {PlanTodoPanel} from './PlanTodoPanel.js';
+import type {PlanTodoState} from './plan-todo.js';
 import type {TranscriptItem} from './transcript.js';
+
+const MAX_TOOL_DETAIL = 2;
 
 type Props = {
   items: TranscriptItem[];
+  plan?: PlanTodoState;
 };
 
 const roleMeta: Record<ChatRole, {label: string; color: 'cyan' | 'green' | 'gray' | 'yellow'}> = {
@@ -27,49 +32,123 @@ function toolStatus(call: ToolCallItem) {
   return {label: '运行中', color: 'yellow' as const};
 }
 
-function ToolBubble({call}: {call: ToolCallItem}) {
+function isToolRunning(call: ToolCallItem): boolean {
+  return !call.output && !call.error;
+}
+
+function pickDetailToolIds(items: TranscriptItem[]): Set<string> {
+  const tools = items.filter((entry): entry is {type: 'tool'; item: ToolCallItem} => entry.type === 'tool');
+  const detailIds = new Set<string>();
+  const running = tools.find((entry) => isToolRunning(entry.item));
+
+  if (running) {
+    detailIds.add(running.item.id);
+  }
+
+  const completed = tools.filter((entry) => !isToolRunning(entry.item));
+  const slots = running ? MAX_TOOL_DETAIL - 1 : MAX_TOOL_DETAIL;
+  for (const entry of completed.slice(-slots)) {
+    detailIds.add(entry.item.id);
+  }
+
+  return detailIds;
+}
+
+function CollapsedToolSummary({count}: {count: number}) {
+  return (
+    <Box marginTop={1} paddingLeft={2}>
+      <Text color="gray">··· 另有 {count} 个工具调用</Text>
+    </Box>
+  );
+}
+
+function ToolBubble({call, showOutput}: {call: ToolCallItem; showOutput: boolean}) {
   const state = toolStatus(call);
 
   return (
-    <Box key={call.id} flexDirection="column" marginTop={1} paddingLeft={2}>
-      <Text>
+    <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+      <Text wrap="truncate">
         <Text color={state.color}>{state.label}</Text>
         <Text color="gray"> 工具 </Text>
         <Text color="yellow">{call.name}</Text>
-        <Text color="gray"> {compactText(call.input)}</Text>
+        <Text color="gray"> {compactText(call.input, 80)}</Text>
       </Text>
-      {state.detail ? (
+      {showOutput && state.detail ? (
         <Text color={call.error ? 'red' : 'gray'} wrap="truncate">
-          {compactText(state.detail)}
+          {compactText(state.detail, 80)}
         </Text>
       ) : null}
     </Box>
   );
 }
 
-function MessageBubble({message}: {message: ChatItem}) {
+function renderTranscriptItems(items: TranscriptItem[]) {
+  const detailToolIds = pickDetailToolIds(items);
+  const latestToolId = [...items].reverse().find((entry) => entry.type === 'tool')?.item.id;
+  const nodes: React.ReactNode[] = [];
+  let collapsedCount = 0;
+  let messageCounter = 0;
+
+  const flushCollapsed = (key: string) => {
+    if (collapsedCount === 0) {
+      return;
+    }
+
+    nodes.push(<CollapsedToolSummary key={key} count={collapsedCount} />);
+    collapsedCount = 0;
+  };
+
+  for (const [index, entry] of items.entries()) {
+    if (entry.type === 'tool') {
+      if (detailToolIds.has(entry.item.id)) {
+        flushCollapsed(`collapsed-before-${entry.item.id}`);
+        nodes.push(
+          <ToolBubble
+            key={entry.item.id}
+            call={entry.item}
+            showOutput={entry.item.id === latestToolId && !isToolRunning(entry.item)}
+          />
+        );
+        continue;
+      }
+
+      collapsedCount += 1;
+      continue;
+    }
+
+    flushCollapsed(`collapsed-before-message-${index}`);
+    messageCounter += 1;
+    nodes.push(
+      <MessageBubble
+        key={`${entry.item.role}-${messageCounter}`}
+        message={entry.item}
+        messageKey={`${entry.item.role}-${messageCounter}`}
+      />
+    );
+  }
+
+  flushCollapsed('collapsed-end');
+  return nodes;
+}
+
+function MessageBubble({message, messageKey}: {message: ChatItem; messageKey: string}) {
   const meta = roleMeta[message.role];
   const isUser = message.role === 'user';
 
   if (message.role === 'system') {
     return (
-      <Box marginTop={1} paddingLeft={2}>
+      <Box key={messageKey} marginTop={1} paddingLeft={2}>
         <Text color="gray">{message.content}</Text>
       </Box>
     );
   }
 
   return (
-    <Box flexDirection="column" alignItems={isUser ? 'flex-end' : 'flex-start'} marginTop={1}>
+    <Box key={messageKey} flexDirection="column" alignItems={isUser ? 'flex-end' : 'flex-start'} marginTop={1}>
       <Text color={meta.color} bold>
         {meta.label}
       </Text>
-      <Box
-        borderStyle="round"
-        borderColor={meta.color}
-        paddingX={1}
-        width="90%"
-      >
+      <Box borderStyle="round" borderColor={meta.color} paddingX={1} width="90%">
         <Text wrap="wrap">
           {message.content}
           {message.streaming ? <Text color="green">▌</Text> : null}
@@ -79,30 +158,18 @@ function MessageBubble({message}: {message: ChatItem}) {
   );
 }
 
-export function ChatPanel({items}: Props) {
+export function ChatPanel({items, plan}: Props) {
   const visible = items.slice(-16);
 
   return (
-    <Box
-      flexDirection="column"
-      flexGrow={1}
-      borderStyle="single"
-      borderColor="gray"
-      paddingX={1}
-      minHeight={12}
-    >
-      {visible.length === 0 ? (
+    <Box flexDirection="column" flexGrow={1} borderStyle="single" borderColor="gray" paddingX={1} minHeight={12}>
+      {plan ? <PlanTodoPanel plan={plan} /> : null}
+      {visible.length === 0 && !plan ? (
         <Box flexGrow={1} alignItems="center" justifyContent="center">
           <Text color="gray">输入问题开始对话</Text>
         </Box>
       ) : (
-        visible.map((entry, index) =>
-          entry.type === 'tool' ? (
-            <ToolBubble key={entry.item.id} call={entry.item} />
-          ) : (
-            <MessageBubble key={`${entry.item.role}-${index}`} message={entry.item} />
-          )
-        )
+        renderTranscriptItems(visible)
       )}
     </Box>
   );

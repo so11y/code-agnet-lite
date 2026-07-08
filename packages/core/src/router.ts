@@ -4,8 +4,10 @@ import {callPlainLlm} from './llm.js';
 import {ROUTER_PROMPT} from './prompt.js';
 import type {AgentSession} from './session.js';
 
+const ROUTE_CONFIDENCE_THRESHOLD = 0.75;
+
 const routeSchema = z.object({
-  mode: z.enum(['react', 'tot']),
+  mode: z.enum(['react', 'tot', 'dag']),
   confidence: z.number().min(0).max(1),
   reason: z.string()
 });
@@ -27,12 +29,19 @@ export async function routeReasoningMode(input: string, session: AgentSession): 
 
   try {
     const parsed = parseAssistantJson(response, routeSchema);
-    return parsed.mode === 'tot' && parsed.confidence >= 0.75
-      ? parsed
-      : {
-          ...parsed,
-          mode: 'react'
-        };
+
+    if (parsed.mode !== 'react' && parsed.confidence >= ROUTE_CONFIDENCE_THRESHOLD) {
+      return parsed;
+    }
+
+    return {
+      mode: 'react',
+      confidence: parsed.confidence,
+      reason:
+        parsed.mode === 'react'
+          ? parsed.reason
+          : `${parsed.reason}（置信度 ${parsed.confidence.toFixed(2)} 不足，已降级为 react）`
+    };
   } catch {
     return {
       mode: 'react',

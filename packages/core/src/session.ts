@@ -1,6 +1,7 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {compact, union} from 'lodash-es';
 import {messageText} from './openai-message.js';
+import type {CursorAgentHandle} from './provider/types.js';
 import {SYSTEM_PROMPT} from './prompt.js';
 import {
   buildInjectedSnapshot,
@@ -58,6 +59,8 @@ function pickString(input: unknown, field: string): string | undefined {
 export class AgentSession {
   cwd: string;
   reasoningMode?: ReasoningMode;
+  cursorAgent?: CursorAgentHandle;
+  cursorAgentCwd?: string;
   readonly messages: AgentMessage[];
   /** 程序侧详细 state */
   readonly state: InternalState;
@@ -251,6 +254,14 @@ export class AgentSession {
   setWorkspace(cwd: string) {
     this.cwd = cwd;
     this.options.onEvent({type: 'workspace', cwd});
+  }
+
+  setCursorAgent(agent?: CursorAgentHandle) {
+    this.cursorAgent = agent;
+  }
+
+  setCursorAgentCwd(cwd?: string) {
+    this.cursorAgentCwd = cwd;
   }
 }
 

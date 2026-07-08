@@ -1,4 +1,16 @@
 import type {ChatCompletionMessageParam} from 'openai/resources/chat/completions';
+import type {AgentMemory} from './agent-memory.js';
+import {createAgentMemory} from './agent-memory.js';
+import type {AgentProviderKind} from './provider/types.js';
+import type {SerializedTaskGraph, TaskNodeKind, TaskNodeStatus, TaskOutput} from './dag/types.js';
+
+export type DagTaskOutput = {
+  summary: string;
+  operations: TurnOperations;
+  facts: string[];
+  visitedFiles?: string[];
+  searchedTerms?: string[];
+};
 
 export type AgentStatus = 'idle' | 'thinking' | 'running_tool' | 'done' | 'error';
 
@@ -49,38 +61,19 @@ export type AgentEvent =
   | {type: 'workspace'; cwd: string}
   | {type: 'tool_start'; call: ToolCallItem}
   | {type: 'tool_end'; id: string; output?: string; error?: string}
-  | {type: 'token_usage'; usage: TokenUsage};
+  | {type: 'token_usage'; usage: TokenUsage}
+  | {type: 'dag_snapshot'; graph: SerializedTaskGraph}
+  | {type: 'task_start'; nodeId: string; kind: TaskNodeKind}
+  | {type: 'task_end'; nodeId: string; output?: DagTaskOutput; error?: string};
 
 /** 程序侧详细账本，供调度、冲突检测、verify 等使用 */
-export type InternalState = {
-  facts: string[];
-  hypotheses: string[];
-  rejected: string[];
-  visitedFiles: string[];
-  searchedTerms: string[];
-  writtenFiles: string[];
-  deletedFiles: string[];
-  executedCommands: string[];
-  noProgress: number;
-  confidence: number;
-};
+export type InternalState = AgentMemory;
 
 /** @deprecated 使用 InternalState */
 export type AgentState = InternalState;
 
-export function createInternalState(): InternalState {
-  return {
-    facts: [],
-    hypotheses: [],
-    rejected: [],
-    visitedFiles: [],
-    searchedTerms: [],
-    writtenFiles: [],
-    deletedFiles: [],
-    executedCommands: [],
-    noProgress: 0,
-    confidence: 0
-  };
+export function createInternalState(): AgentMemory {
+  return createAgentMemory();
 }
 
 export function createAgentState(): InternalState {
@@ -112,10 +105,13 @@ export type AgentSessionOptions = {
   cwd: string;
   onEvent(event: AgentEvent): void;
   maxSteps?: number;
+  provider?: AgentProviderKind;
 };
 
 export type AgentOptions = AgentSessionOptions;
 
-export type ReasoningMode = 'react' | 'tot';
+export type ReasoningMode = 'react' | 'tot' | 'dag';
 
 export type AgentMessage = ChatCompletionMessageParam;
+
+export type {SerializedTaskGraph, TaskNodeKind, TaskNodeStatus, TaskOutput};

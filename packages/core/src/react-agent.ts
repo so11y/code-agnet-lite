@@ -66,7 +66,7 @@ export abstract class ReActAgent {
     return 60_000;
   }
 
-  private async runTool(toolCall: ChatCompletionMessageToolCall) {
+  protected async runTool(toolCall: ChatCompletionMessageToolCall) {
     const input = parseToolArgs(toolCall);
     const call: ToolCallItem = {id: toolCall.id, name: toolCall.function.name, input};
     const tool = this.findTool(call.name);
@@ -84,6 +84,11 @@ export abstract class ReActAgent {
       return;
     }
 
+    if (!(await this.beforeToolExecute(call.name, parsed.data))) {
+      this.failTool(call.id, '工具调用被 Worker 策略拒绝');
+      return;
+    }
+
     this.session.recordToolCall(call.name, parsed.data);
 
     try {
@@ -98,6 +103,10 @@ export abstract class ReActAgent {
     } catch (error) {
       this.failTool(call.id, error instanceof Error ? error.message : String(error));
     }
+  }
+
+  protected async beforeToolExecute(_name: string, _input: unknown): Promise<boolean> {
+    return true;
   }
 
   private failTool(id: string, message: string) {

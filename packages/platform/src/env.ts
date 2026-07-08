@@ -63,3 +63,23 @@ export function getOpenAiBaseUrl(): string | undefined {
 export function getOpenAiModel(defaultModel?: string): string {
   return process.env.OPENAI_MODEL?.trim() || defaultModel || '';
 }
+
+export type AgentProviderKind = 'openai' | 'cursor';
+
+export function getAgentProviderKind(): AgentProviderKind {
+  const value = process.env.AGENT_PROVIDER?.trim().toLowerCase();
+  return value === 'cursor' ? 'cursor' : 'openai';
+}
+
+export function getCursorApiKey(): string {
+  const cursorKey = process.env.CURSOR_API_KEY?.trim();
+  if (cursorKey) {
+    return cursorKey;
+  }
+
+  return process.env.OPENAI_API_KEY?.trim() ?? '';
+}
+
+export function getCursorModel(): string {
+  return process.env.CURSOR_MODEL?.trim() || 'claude-sonnet-4';
+}

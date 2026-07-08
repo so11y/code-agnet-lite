@@ -1,7 +1,9 @@
 import path from 'node:path';
+import {readFile} from 'node:fs/promises';
 import React, {useCallback, useState} from 'react';
 import {Box, Text} from 'ink';
 import {createTokenUsage, type AgentEvent, type AgentStatus, type ChatItem, type TokenUsage} from '@code-agent-lite/core';
+import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {
   absolutePathCandidates,
   firstDirectory,
@@ -12,7 +14,9 @@ import {
 import {ChatPanel} from './ChatPanel.js';
 import {InputBox} from './InputBox.js';
 import {StatusBar} from './StatusBar.js';
-import type {TranscriptItem} from './transcript.js';
+import {planFromGraph} from './plan-todo.js';
+import {isInternalSystemMessage, type TranscriptItem} from './transcript.js';
+import type {PlanTodoState} from './plan-todo.js';
 import {useAgentSession} from './useAgentSession.js';
 
 type Props = {
@@ -22,11 +26,16 @@ type Props = {
 export function App({cwd}: Props) {
   const [workspace, setWorkspace] = useState(() => path.resolve(cwd));
   const [items, setItems] = useState<TranscriptItem[]>([]);
+  const [plan, setPlan] = useState<PlanTodoState | undefined>();
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string>();
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>(() => createTokenUsage());
 
   const appendMessage = useCallback((item: ChatItem) => {
+    if (item.role === 'system' && isInternalSystemMessage(item.content)) {
+      return;
+    }
+
     setItems((current) => [...current, {type: 'message', item}]);
   }, []);
 
@@ -101,6 +110,12 @@ export function App({cwd}: Props) {
             total: current.total + event.usage.total
           }));
           break;
+        case 'dag_snapshot':
+          setPlan(planFromGraph(event.graph));
+          break;
+        case 'task_start':
+        case 'task_end':
+          break;
       }
     },
     [appendMessage, updateStatus, updateStreamingAssistant]
@@ -112,6 +127,7 @@ export function App({cwd}: Props) {
     (cwdForSession: string) => {
       clearSession();
       setItems([]);
+      setPlan(undefined);
       setTokenUsage(createTokenUsage());
       updateStatus('idle', cwdForSession);
       appendMessage({role: 'system', content: '已开始新对话'});
@@ -154,31 +170,57 @@ export function App({cwd}: Props) {
     [appendMessage, updateStatus, workspace]
   );
 
+  const busy = status === 'thinking' || status === 'running_tool';
+  const provider = getAgentProviderKind();
+
   const submit = useCallback(
     (input: string) => {
-      if (parseNewSessionCommand(input)) {
-        resetSession(workspace);
+      if (busy) {
         return;
       }
 
-      const nextWorkspace = parseWorkspaceCommand(input);
-      if (nextWorkspace) {
-        void switchWorkspace(input, nextWorkspace);
-        return;
-      }
+      void (async () => {
+        let resolvedInput = input;
 
-      const paths = absolutePathCandidates(input);
-      if (paths.length === 0) {
-        runInWorkspace(input, workspace);
-        return;
-      }
+        const fileRef = /^@(.+)$/.exec(input.trim());
+        if (fileRef) {
+          try {
+            const filePath = path.resolve(workspace, fileRef[1].trim());
+            resolvedInput = await readFile(filePath, 'utf8');
+            appendMessage({role: 'system', content: `已从文件加载：${filePath}`});
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            updateStatus('error', message);
+            appendMessage({role: 'system', content: `读取失败：${message}`});
+            return;
+          }
+        }
 
-      updateStatus('thinking', paths[0]);
-      void firstDirectory(paths).then((resolved) => {
+        if (parseNewSessionCommand(resolvedInput)) {
+          resetSession(workspace);
+          return;
+        }
+
+        const nextWorkspace = parseWorkspaceCommand(resolvedInput);
+        if (nextWorkspace) {
+          await switchWorkspace(resolvedInput, nextWorkspace);
+          return;
+        }
+
+        const isMultiline = resolvedInput.includes('\n');
+        const paths = isMultiline ? [] : absolutePathCandidates(resolvedInput);
+
+        if (paths.length === 0) {
+          runInWorkspace(resolvedInput, workspace);
+          return;
+        }
+
+        updateStatus('thinking', paths[0]);
+        const resolved = await firstDirectory(paths);
         if (!resolved) {
           const message = `工作区路径不存在或不是目录：${paths[0]}`;
           updateStatus('error', message);
-          appendMessage({role: 'user', content: input});
+          appendMessage({role: 'user', content: resolvedInput});
           appendMessage({role: 'system', content: message});
           return;
         }
@@ -188,22 +230,22 @@ export function App({cwd}: Props) {
           appendMessage({role: 'system', content: `工作区：${resolved}`});
         }
 
-        runInWorkspace(input, resolved);
-      });
+        appendMessage({role: 'user', content: resolvedInput});
+        runInWorkspace(resolvedInput, resolved);
+      })();
     },
-    [appendMessage, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
+    [appendMessage, busy, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
   );
-
-  const busy = status === 'thinking' || status === 'running_tool';
 
   return (
     <Box flexDirection="column" height="100%">
       <Box paddingX={1}>
         <Text bold color="cyan">OpenCode Lite</Text>
         <Text color="gray">  {workspace}</Text>
+        <Text color="gray">  · provider: {provider}</Text>
       </Box>
       <Box flexDirection="column" flexGrow={1} marginTop={1}>
-        <ChatPanel items={items} />
+        <ChatPanel items={items} plan={plan} />
       </Box>
       <Box flexDirection="column">
         <StatusBar status={status} message={statusMessage} tokenUsage={tokenUsage} />

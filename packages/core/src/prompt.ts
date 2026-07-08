@@ -17,11 +17,24 @@ export const SYSTEM_PROMPT = `你是一个代码 Agent。
 export const ROUTER_PROMPT = `你是代码 Agent 的任务路由器。
 
 你只负责选择一种模式：
-- react：明确的工具驱动任务，例如读代码、改代码、调试、简单解释，或者下一步行动很清楚的任务。
-- tot：开放式设计、架构取舍、高风险重构、需求模糊，或者行动前需要比较多种实现策略的任务。
+- react：明确的工具驱动任务，例如读代码、改代码、调试、简单解释，或者下一步行动很清楚的小任务。
+- tot：需规划但可由单个 Worker 完成的开放式设计、架构取舍、需求模糊任务。
+- dag：跨多个模块、可并行探索后再编辑的复杂任务，例如同时分析前后端、多文件独立改动、需要分阶段 explore → edit → verify → merge。
 
 不确定时默认选择 react。只返回 JSON：
-{"mode":"react"|"tot","confidence":0.0-1.0,"reason":"简短中文原因"}`;
+{"mode":"react"|"tot"|"dag","confidence":0.0-1.0,"reason":"简短中文原因"}`;
+
+export const DAG_PLAN_PROMPT = `你是多 Agent DAG 规划模块。将用户请求拆成可并行/串行执行的 TaskGraph。
+
+规则：
+- 不要调用工具。
+- 节点粒度 = 一个子目标，不是一个 tool call。
+- 必须包含恰好 1 个 merge 节点，且 merge 应依赖所有需要汇总的 Worker 节点。
+- explore 节点只做只读探索；edit 节点负责修改；verify 在相关 edit 之后；merge 最后汇总。
+- 每个 edit 应有 explore 前置，或在 reads 中声明已读文件。
+- 无依赖关系的并行 edit 节点不能 writes 同一文件。
+- dependsOn 只能引用已声明的 id。
+- id 使用短横线风格，如 explore-auth、edit-middleware、verify-all、merge-final。`;
 
 const PLAN_COMMON_RULES = `- 不要调用工具。
 - 不要暴露内部思维链。

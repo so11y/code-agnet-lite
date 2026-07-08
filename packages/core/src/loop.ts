@@ -1,8 +1,11 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {isEmpty} from 'lodash-es';
+import {resolveAgentProviderKind} from './provider/index.js';
 import {toolsByName} from '@code-agent-lite/tools';
+import {runDagTurn} from './dag/orchestrator.js';
 import {callLlmStream} from './llm.js';
 import {llmPlan, llmReplan, updateStateFromRun} from './planner.js';
+import {runCursorAgentTurn} from './provider/index.js';
 import {ReActAgent} from './react-agent.js';
 import {routeReasoningMode} from './router.js';
 import {AgentSession} from './session.js';
@@ -54,7 +57,6 @@ async function runTotLoop(agent: CodeAgent, session: AgentSession): Promise<void
   }
 }
 
-
 export async function runAgentTurn(
   session: AgentSession,
   input: string,
@@ -63,6 +65,12 @@ export async function runAgentTurn(
   const targetCwd = cwd ?? session.cwd;
   if (targetCwd !== session.cwd) {
     session.setWorkspace(targetCwd);
+  }
+
+  const provider = resolveAgentProviderKind(session.options.provider);
+  if (provider === 'cursor') {
+    await runCursorAgentTurn(session, input, targetCwd);
+    return;
   }
 
   session.beginTurn(input);
@@ -81,6 +89,9 @@ export async function runAgentTurn(
     case 'tot':
       await runTotLoop(agent, session);
       break;
+    case 'dag':
+      await runDagTurn(session, input);
+      return;
   }
 
   const review = await judgeShouldVerify(session);
