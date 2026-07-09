@@ -81,59 +81,55 @@ export function allPredecessorsDone(graph: TaskGraph, node: TaskNode): boolean {
   });
 }
 
-/** 上游 failed/skipped 时，将仍 pending 的下游标为 skipped，避免假死锁 */
-export function skipNodesWithBlockedPredecessors(graph: TaskGraph) {
-  let changed = true;
+export function topologicalSortIds(
+  ids: string[],
+  edges: Array<{from: string; to: string}>
+): string[] {
+  const idSet = new Set(ids);
+  const indegree = new Map<string, number>();
+  const outgoing = new Map<string, string[]>();
 
-  while (changed) {
-    changed = false;
-
-    for (const node of graph.nodes.values()) {
-      if (node.status !== 'pending') {
-        continue;
-      }
-
-      const blocked = getPredecessors(graph, node.id).some((id) => {
-        const status = graph.nodes.get(id)?.status;
-        return status === 'failed' || status === 'skipped';
-      });
-
-      if (blocked) {
-        node.status = 'skipped';
-        node.error = '上游节点未完成（失败或已跳过）';
-        changed = true;
-      }
-    }
+  for (const id of ids) {
+    indegree.set(id, 0);
+    outgoing.set(id, []);
   }
-}
 
-export function findReadyNodes(graph: TaskGraph): TaskNode[] {
-  return [...graph.nodes.values()].filter(
-    (node) => node.status === 'pending' && allPredecessorsDone(graph, node)
-  );
-}
-
-export function hasIncompleteNodes(graph: TaskGraph): boolean {
-  return [...graph.nodes.values()].some(
-    (node) => node.status === 'pending' || node.status === 'running'
-  );
-}
-
-export function skipDownstream(graph: TaskGraph, failedNodeId: string) {
-  const queue = getSuccessors(graph, failedNodeId);
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
-    const node = graph.nodes.get(nodeId);
-
-    if (!node || node.status !== 'pending') {
+  for (const edge of edges) {
+    if (!idSet.has(edge.from) || !idSet.has(edge.to)) {
       continue;
     }
 
-    node.status = 'skipped';
-    node.error = `上游节点 ${failedNodeId} 失败`;
-    queue.push(...getSuccessors(graph, nodeId));
+    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
+    outgoing.get(edge.from)?.push(edge.to);
   }
+
+  const queue = [...indegree.entries()]
+    .filter(([, degree]) => degree === 0)
+    .map(([id]) => id)
+    .sort();
+
+  const ordered: string[] = [];
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    ordered.push(id);
+
+    for (const next of outgoing.get(id) ?? []) {
+      const degree = (indegree.get(next) ?? 1) - 1;
+      indegree.set(next, degree);
+      if (degree === 0) {
+        queue.push(next);
+        queue.sort();
+      }
+    }
+  }
+
+  if (ordered.length < ids.length) {
+    const seen = new Set(ordered);
+    return [...ordered, ...ids.filter((id) => !seen.has(id))];
+  }
+
+  return ordered;
 }
 
 export function buildGraphFromPlan(tasks: Array<{

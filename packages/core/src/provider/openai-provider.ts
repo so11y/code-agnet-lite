@@ -1,7 +1,9 @@
 import OpenAI from 'openai';
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import type {ChatCompletion} from 'openai/resources/chat/completions';
-import {tools} from '@code-agent-lite/tools';
+import type {AgentTool} from '@code-agent-lite/tools';
+import {createDefaultToolRegistry} from '../tool-registry.js';
+import type {AgentSession} from '../session.js';
 import {
   getOpenAiBaseUrl,
   getOpenAiModel,
@@ -9,6 +11,7 @@ import {
   isThinkingEnabled
 } from '@code-agent-lite/platform';
 import type {AgentMessage, ChatRole, TokenUsage} from '../session-types.js';
+import {normalizeOpenAiUsage, recordTokenUsage} from './token-usage.js';
 import type {LlmCallOptions, LlmProvider, ProviderLlmStreamOptions} from './types.js';
 
 const DEFAULT_MODEL = '';
@@ -16,31 +19,6 @@ const DEFAULT_MODEL = '';
 type ReasoningMessage = {
   reasoning_content?: string | null;
 };
-
-function normalizeUsage(usage?: {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-}): TokenUsage | undefined {
-  if (!usage) {
-    return;
-  }
-
-  const prompt = usage.prompt_tokens ?? 0;
-  const completion = usage.completion_tokens ?? 0;
-
-  return {
-    prompt,
-    completion,
-    total: usage.total_tokens ?? prompt + completion
-  };
-}
-
-function recordUsage(options: LlmCallOptions | undefined, usage?: TokenUsage) {
-  if (usage) {
-    options?.session?.recordTokenUsage(usage);
-  }
-}
 
 function thinkingExtraBody(): {enable_thinking: boolean} | undefined {
   return isThinkingEnabled() ? {enable_thinking: true} : undefined;
@@ -74,11 +52,17 @@ function createClient() {
   return sharedClient;
 }
 
+function resolveTools(options?: LlmCallOptions): readonly AgentTool[] {
+  const session = options?.session as AgentSession | undefined;
+  return session?.toolRegistry.tools ?? createDefaultToolRegistry().tools;
+}
+
 export class OpenAiLlmProvider implements LlmProvider {
   readonly kind = 'openai' as const;
 
-  private createChatCompletion(messages: AgentMessage[], withTools: boolean) {
+  private createChatCompletion(messages: AgentMessage[], withTools: boolean, options?: LlmCallOptions) {
     const thinking = thinkingExtraBody();
+    const toolList = resolveTools(options);
 
     return createClient().chat.completions.create({
       model: getOpenAiModel(DEFAULT_MODEL),
@@ -86,25 +70,30 @@ export class OpenAiLlmProvider implements LlmProvider {
       ...(thinking ? {extra_body: thinking} : {}),
       ...(withTools
         ? {
-            tools: tools.map((tool) => tool.openaiTool),
+            tools: toolList.map((tool) => tool.openaiTool),
             tool_choice: 'auto' as const
           }
         : {})
     });
   }
 
-  async chatWithTools(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
-    const response = await this.createChatCompletion(messages, true);
-    recordUsage(options, normalizeUsage(response.usage));
+  private async completeChat(
+    messages: AgentMessage[],
+    withTools: boolean,
+    options?: LlmCallOptions
+  ): Promise<ChatCompletion> {
+    const response = await this.createChatCompletion(messages, withTools, options);
+    recordTokenUsage(options?.session, normalizeOpenAiUsage(response.usage));
     emitPlainReasoning(options, response.choices[0]?.message);
     return response;
   }
 
+  async chatWithTools(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
+    return this.completeChat(messages, true, options);
+  }
+
   async plainChat(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
-    const response = await this.createChatCompletion(messages, false);
-    recordUsage(options, normalizeUsage(response.usage));
-    emitPlainReasoning(options, response.choices[0]?.message);
-    return response;
+    return this.completeChat(messages, false, options);
   }
 
   async streamWithTools(
@@ -112,6 +101,7 @@ export class OpenAiLlmProvider implements LlmProvider {
     options: ProviderLlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam> {
     const thinking = thinkingExtraBody();
+    const toolList = resolveTools(options);
 
     const stream = await createClient().chat.completions.create({
       model: getOpenAiModel(DEFAULT_MODEL),
@@ -119,8 +109,9 @@ export class OpenAiLlmProvider implements LlmProvider {
       stream: true,
       stream_options: {include_usage: true},
       ...(thinking ? {extra_body: thinking} : {}),
-      tools: tools.map((tool) => tool.openaiTool),
-      tool_choice: 'auto'
+      tools: toolList.map((tool) => tool.openaiTool),
+      tool_choice: 'auto',
+      ...(options.signal ? {signal: options.signal} : {})
     });
 
     let content = '';
@@ -133,7 +124,7 @@ export class OpenAiLlmProvider implements LlmProvider {
 
     for await (const chunk of stream) {
       if (chunk.usage) {
-        usage = normalizeUsage(chunk.usage);
+        usage = normalizeOpenAiUsage(chunk.usage);
       }
 
       const delta = chunk.choices[0]?.delta;
@@ -177,7 +168,7 @@ export class OpenAiLlmProvider implements LlmProvider {
       }
     }
 
-    recordUsage(options, usage);
+    recordTokenUsage(options?.session, usage);
 
     const toolCalls = [...toolCallsByIndex.entries()]
       .sort(([left], [right]) => left - right)

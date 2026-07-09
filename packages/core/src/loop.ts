@@ -1,106 +1,23 @@
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import {isEmpty} from 'lodash-es';
-import {resolveAgentProviderKind} from './provider/index.js';
-import {toolsByName} from '@code-agent-lite/tools';
-import {runDagTurn} from './dag/orchestrator.js';
-import {callLlmStream} from './llm.js';
-import {llmPlan, llmReplan, updateStateFromRun} from './planner.js';
-import {runCursorAgentTurn} from './provider/index.js';
-import {ReActAgent} from './react-agent.js';
-import {routeReasoningMode} from './router.js';
-import {AgentSession} from './session.js';
-import type {AgentMessage, LlmStreamOptions} from './session-types.js';
-import {judgeShouldVerify, runVerifyAndFixLoop} from './verify.js';
+import {isAbortError} from '@code-agent-lite/shared';
+import {getAgentAi} from './provider/provider-registry.js';
+import type {AgentSession} from './session.js';
 
-class CodeAgent extends ReActAgent {
-  protected async streamLlm(
-    messages: AgentMessage[],
-    options: LlmStreamOptions
-  ): Promise<ChatCompletionAssistantMessageParam> {
-    return callLlmStream(messages, options);
-  }
-
-  protected findTool(name: string) {
-    return toolsByName.get(name);
-  }
-}
-
-async function runTotLoop(agent: CodeAgent, session: AgentSession): Promise<void> {
-  while (true) {
-    if (session.state.noProgress >= 2) {
-      await llmReplan(session);
-      session.state.noProgress = 0;
-    } else if (isEmpty(session.state.hypotheses)) {
-      await llmPlan(session);
-    }
-
-    const progressBefore = session.snapshotProgress();
-
-    let result;
-    try {
-      result = await agent.run();
-    } catch (error) {
-      await updateStateFromRun(
-        session,
-        {completed: false, steps: 0, reason: 'max_steps'},
-        error,
-        progressBefore
-      );
-      throw error;
-    }
-
-    await updateStateFromRun(session, result, undefined, progressBefore);
-
-    if (result.completed || session.state.confidence >= 0.9) {
-      return;
-    }
-  }
-}
-
+/** 统一在此处理 turn 取消；provider 层不再 catch abort。 */
 export async function runAgentTurn(
   session: AgentSession,
   input: string,
   cwd?: string
 ): Promise<void> {
   const targetCwd = cwd ?? session.cwd;
-  if (targetCwd !== session.cwd) {
-    session.setWorkspace(targetCwd);
-  }
 
-  const provider = resolveAgentProviderKind(session.options.provider);
-  if (provider === 'cursor') {
-    await runCursorAgentTurn(session, input, targetCwd);
-    return;
-  }
-
-  session.beginTurn(input);
-  session.appendUser(input, {emit: false});
-
-  const agent = new CodeAgent(session.options, session);
-
-  session.status('thinking', '路由判断');
-  const route = await routeReasoningMode(input, session);
-  session.reasoningMode = route.mode;
-  session.say('system', `路由 → ${route.mode}：${route.reason}`);
-
-  switch (route.mode) {
-    case 'react':
-      await agent.run();
-      break;
-    case 'tot':
-      await runTotLoop(agent, session);
-      break;
-    case 'dag':
-      await runDagTurn(session, input);
+  try {
+    await getAgentAi(session.options.provider).runTurn(session, input, targetCwd);
+  } catch (error) {
+    if (isAbortError(error)) {
+      session.status('cancelled', '任务已终止');
       return;
+    }
+
+    throw error;
   }
-
-  const review = await judgeShouldVerify(session);
-
-  if (review.gate.shouldVerify) {
-    await runVerifyAndFixLoop(agent, session, review);
-    return;
-  }
-
-  session.status('done', '完成');
 }

@@ -1,21 +1,15 @@
 import path from 'node:path';
-import {readFile} from 'node:fs/promises';
 import React, {useCallback, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
-import {createTokenUsage, type AgentEvent, type AgentStatus, type ChatItem, type TokenUsage} from '@code-agent-lite/core';
-import {getAgentProviderKind} from '@code-agent-lite/platform';
-import {
-  absolutePathCandidates,
-  firstDirectory,
-  isDirectory,
-  parseNewSessionCommand,
-  parseWorkspaceCommand
-} from '@code-agent-lite/platform';
+import {createTokenUsage, isAgentBusy, type AgentEvent, type AgentStatus, type ChatItem, type TokenUsage} from '@code-agent-lite/core';
+import {getAgentProviderKind, resolveWorkspaceDirectory} from '@code-agent-lite/platform';
+import {formatError, isAbortError} from '@code-agent-lite/shared';
+import {handleSubmit} from '../services/submit-handler.js';
 import {ChatPanel} from './ChatPanel.js';
 import {InputBox} from './InputBox.js';
 import {StatusBar} from './StatusBar.js';
 import {planFromGraph, type PlanTodoState} from './plan-todo.js';
-import {isInternalSystemMessage, type TranscriptItem} from './transcript.js';
+import {isInternalSystemMessage, updateStreamingMessage, type TranscriptItem} from './transcript.js';
 import {useAgentSession} from './useAgentSession.js';
 
 type Props = {
@@ -38,46 +32,8 @@ export function App({cwd}: Props) {
     setItems((current) => [...current, {type: 'message', item}]);
   }, []);
 
-  const updateStreamingAssistant = useCallback((update: (item: ChatItem) => ChatItem) => {
-    setItems((current) => {
-      for (let index = current.length - 1; index >= 0; index -= 1) {
-        const entry = current[index];
-        if (
-          entry.type === 'message' &&
-          entry.item.role === 'assistant' &&
-          entry.item.streaming
-        ) {
-          return [
-            ...current.slice(0, index),
-            {type: 'message', item: update(entry.item)},
-            ...current.slice(index + 1)
-          ];
-        }
-      }
-
-      return current;
-    });
-  }, []);
-
-  const updateStreamingThinking = useCallback((update: (item: ChatItem) => ChatItem) => {
-    setItems((current) => {
-      for (let index = current.length - 1; index >= 0; index -= 1) {
-        const entry = current[index];
-        if (
-          entry.type === 'message' &&
-          entry.item.role === 'thinking' &&
-          entry.item.streaming
-        ) {
-          return [
-            ...current.slice(0, index),
-            {type: 'message', item: update(entry.item)},
-            ...current.slice(index + 1)
-          ];
-        }
-      }
-
-      return current;
-    });
+  const updateStreamingByRole = useCallback((role: ChatItem['role'], update: (item: ChatItem) => ChatItem) => {
+    setItems((current) => updateStreamingMessage(current, role, update));
   }, []);
 
   const updateStatus = useCallback((next: AgentStatus, message?: string) => {
@@ -98,25 +54,25 @@ export function App({cwd}: Props) {
           appendMessage({role: event.role, content: '', streaming: true});
           break;
         case 'message_delta':
-          updateStreamingAssistant((item) => ({
+          updateStreamingByRole('assistant', (item) => ({
             ...item,
             content: `${item.content}${event.delta}`
           }));
           break;
         case 'message_end':
-          updateStreamingAssistant((item) => ({...item, streaming: false}));
+          updateStreamingByRole('assistant', (item) => ({...item, streaming: false}));
           break;
         case 'thinking_start':
           appendMessage({role: 'thinking', content: '', streaming: true});
           break;
         case 'thinking_delta':
-          updateStreamingThinking((item) => ({
+          updateStreamingByRole('thinking', (item) => ({
             ...item,
             content: `${item.content}${event.delta}`
           }));
           break;
         case 'thinking_end':
-          updateStreamingThinking((item) => ({...item, streaming: false}));
+          updateStreamingByRole('thinking', (item) => ({...item, streaming: false}));
           break;
         case 'workspace':
           setWorkspace(event.cwd);
@@ -136,11 +92,7 @@ export function App({cwd}: Props) {
           );
           break;
         case 'token_usage':
-          setTokenUsage((current) => ({
-            prompt: current.prompt + event.usage.prompt,
-            completion: current.completion + event.usage.completion,
-            total: current.total + event.usage.total
-          }));
+          setTokenUsage(event.usage);
           break;
         case 'dag_snapshot':
           setPlan(planFromGraph(event.graph));
@@ -150,10 +102,10 @@ export function App({cwd}: Props) {
           break;
       }
     },
-    [appendMessage, updateStatus, updateStreamingAssistant, updateStreamingThinking]
+    [appendMessage, updateStatus, updateStreamingByRole]
   );
 
-  const {clearSession, runTurn} = useAgentSession({onEvent});
+  const {clearSession, cancelTurn, runTurn} = useAgentSession({onEvent});
 
   const resetSession = useCallback(
     (cwdForSession: string) => {
@@ -171,7 +123,11 @@ export function App({cwd}: Props) {
     (input: string, cwdForRun: string) => {
       updateStatus('thinking', cwdForRun);
       void runTurn(input, cwdForRun).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
+        if (isAbortError(error)) {
+          return;
+        }
+
+        const message = formatError(error);
         updateStatus('error', message);
         appendMessage({role: 'assistant', content: message});
       });
@@ -181,20 +137,16 @@ export function App({cwd}: Props) {
 
   const switchWorkspace = useCallback(
     async (input: string, target: string) => {
-      const resolved = path.resolve(workspace, target);
-      updateStatus('thinking', resolved);
+      updateStatus('thinking', target);
       appendMessage({role: 'user', content: input});
 
       try {
-        if (!(await isDirectory(resolved))) {
-          throw new Error(`工作区不是目录：${resolved}`);
-        }
-
+        const resolved = await resolveWorkspaceDirectory(workspace, target);
         setWorkspace(resolved);
         updateStatus('idle', resolved);
         appendMessage({role: 'system', content: `工作区：${resolved}`});
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatError(error);
         updateStatus('error', message);
         appendMessage({role: 'system', content: message});
       }
@@ -202,7 +154,7 @@ export function App({cwd}: Props) {
     [appendMessage, updateStatus, workspace]
   );
 
-  const busy = status === 'thinking' || status === 'running_tool';
+  const busy = isAgentBusy(status);
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const provider = getAgentProviderKind();
@@ -213,68 +165,15 @@ export function App({cwd}: Props) {
         return;
       }
 
-      const displayInput = input.trim();
-      if (!displayInput) {
-        return;
-      }
-
-      const isNewSession = parseNewSessionCommand(displayInput);
-      const workspaceTarget = parseWorkspaceCommand(displayInput);
-      if (!isNewSession && !workspaceTarget) {
-        appendMessage({role: 'user', content: displayInput});
-      }
-
-      void (async () => {
-        let resolvedInput = input;
-
-        const fileRef = /^@(.+)$/.exec(displayInput);
-        if (fileRef) {
-          try {
-            const filePath = path.resolve(workspace, fileRef[1].trim());
-            resolvedInput = await readFile(filePath, 'utf8');
-            appendMessage({role: 'system', content: `已从文件加载：${filePath}`});
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            updateStatus('error', message);
-            appendMessage({role: 'system', content: `读取失败：${message}`});
-            return;
-          }
-        }
-
-        if (isNewSession) {
-          resetSession(workspace);
-          return;
-        }
-
-        if (workspaceTarget) {
-          await switchWorkspace(resolvedInput, workspaceTarget);
-          return;
-        }
-
-        const isMultiline = resolvedInput.includes('\n');
-        const paths = isMultiline ? [] : absolutePathCandidates(resolvedInput);
-
-        if (paths.length === 0) {
-          runInWorkspace(resolvedInput, workspace);
-          return;
-        }
-
-        updateStatus('thinking', paths[0]);
-        const resolved = await firstDirectory(paths);
-        if (!resolved) {
-          const message = `工作区路径不存在或不是目录：${paths[0]}`;
-          updateStatus('error', message);
-          appendMessage({role: 'system', content: message});
-          return;
-        }
-
-        if (resolved !== workspace) {
-          setWorkspace(resolved);
-          appendMessage({role: 'system', content: `工作区：${resolved}`});
-        }
-
-        runInWorkspace(resolvedInput, resolved);
-      })();
+      void handleSubmit(input, {
+        workspace,
+        appendMessage,
+        updateStatus,
+        setWorkspace,
+        resetSession,
+        switchWorkspace,
+        runInWorkspace
+      });
     },
     [appendMessage, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
   );
@@ -291,7 +190,7 @@ export function App({cwd}: Props) {
       </Box>
       <Box flexDirection="column">
         <StatusBar status={status} message={statusMessage} tokenUsage={tokenUsage} />
-        <InputBox disabled={busy} onSubmit={submit} />
+        <InputBox disabled={busy} onSubmit={submit} onCancel={cancelTurn} />
       </Box>
     </Box>
   );

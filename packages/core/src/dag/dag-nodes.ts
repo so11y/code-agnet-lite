@@ -1,36 +1,14 @@
 import type {AgentSession} from '../session.js';
-import {extractAssistantText} from '../openai-message.js';
-import {callPlainLlm} from '../llm.js';
-import {
-  discoverVerifyCommands,
-  formatVerifyFailure,
-  runAllVerify
-} from '../verify.js';
+import {VerifyCoordinator} from '../verify/verify-coordinator.js';
 import type {Blackboard, TaskNode} from './types.js';
 import {createTaskOutput, type TaskOutput} from './types.js';
+import {extractAssistantText} from '../openai-message.js';
+import {callPlainLlm} from '../llm.js';
+import {formatUserRequest} from '../prompt.js';
+import {createEmptyTurnOperations} from '../types/operations.js';
 
 export async function runVerifyNode(node: TaskNode, cwd: string): Promise<TaskOutput> {
-  const commands = await discoverVerifyCommands(cwd);
-
-  if (commands.length === 0) {
-    return createTaskOutput({
-      summary: '未找到可运行的验证命令，已跳过自动验证。',
-      operations: {writtenFiles: [], deletedFiles: [], executedCommands: []},
-      facts: ['当前工作区没有 npm test / typecheck 等验证命令']
-    });
-  }
-
-  const failures = await runAllVerify(cwd, commands);
-
-  if (failures.length === 0) {
-    return createTaskOutput({
-      summary: `验证通过：${commands.join('、')}`,
-      operations: {writtenFiles: [], deletedFiles: [], executedCommands: commands},
-      facts: ['DAG verify 节点验证通过']
-    });
-  }
-
-  throw new Error(`验证节点 ${node.id} 失败\n\n${formatVerifyFailure(failures, 1)}`);
+  return new VerifyCoordinator(cwd).runNodeVerify(node);
 }
 
 export async function runMergeNode(
@@ -45,7 +23,7 @@ export async function runMergeNode(
     .join('\n\n');
 
   const merged = [
-    `用户请求：${userInput}`,
+    formatUserRequest(userInput),
     '',
     '各 Worker 摘要：',
     summaries || '（无 Worker 输出）',
@@ -68,7 +46,7 @@ export async function runMergeNode(
 
   return createTaskOutput({
     summary,
-    operations: {writtenFiles: [], deletedFiles: [], executedCommands: []},
+    operations: createEmptyTurnOperations(),
     facts: [...blackboard.facts]
   });
 }

@@ -1,13 +1,12 @@
 import type {
   ChatCompletion,
-  ChatCompletionAssistantMessageParam,
   ChatCompletionMessageParam,
   ChatCompletionMessageToolCall
 } from 'openai/resources/chat/completions';
 import {z} from 'zod';
 import {parseJsonObject, truncate} from '@code-agent-lite/shared';
 
-export function messageText(content: ChatCompletionAssistantMessageParam['content']) {
+export function messageText(content: ChatCompletionMessageParam['content']) {
   if (!content) {
     return;
   }
@@ -52,12 +51,9 @@ export function parseAssistantJson<T extends z.ZodTypeAny>(
 }
 
 export function agentMessageText(message: ChatCompletionMessageParam): string {
-  if (typeof message.content === 'string') {
-    return message.content;
-  }
-
-  if (message.content) {
-    return JSON.stringify(message.content);
+  const content = messageText(message.content);
+  if (content) {
+    return content;
   }
 
   if ('tool_calls' in message && message.tool_calls?.length) {

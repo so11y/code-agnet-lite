@@ -1,6 +1,6 @@
 import type {ChatCompletion} from 'openai/resources/chat/completions';
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import {getLlmProvider} from './provider/factory.js';
+import {getLlmProvider} from './provider/provider-registry.js';
 import type {AgentMessage, LlmOptions, LlmStreamOptions} from './session-types.js';
 
 export async function callLlm(

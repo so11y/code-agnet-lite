@@ -1,3 +1,4 @@
+import {execaCommand} from 'execa';
 import {compact} from 'lodash-es';
 import {truncate} from './truncate.js';
 
@@ -18,13 +19,35 @@ export function formatCommandOutput(result: CommandResult, timeoutMessage?: stri
   return truncate(`退出码：${exit}${timeout}\n${parts.join('\n') || '无输出。'}`);
 }
 
+export function commandExitCode(result: CommandResult): number {
+  return Number(result.exitCode ?? result.code ?? 1);
+}
+
+export async function executeShellCommand(
+  command: string,
+  options: {cwd: string; signal?: AbortSignal}
+): Promise<CommandResult> {
+  return execaCommand(command, {
+    cwd: options.cwd,
+    shell: true,
+    reject: false,
+    cancelSignal: options.signal
+  }) as Promise<CommandResult>;
+}
+
+export async function runProcess(
+  operation: () => Promise<CommandResult>
+): Promise<CommandResult> {
+  try {
+    return await operation();
+  } catch (error) {
+    return error as CommandResult;
+  }
+}
+
 export async function runCommand(
   operation: () => Promise<CommandResult>,
   timeoutMessage?: string
 ): Promise<string> {
-  try {
-    return formatCommandOutput(await operation(), timeoutMessage);
-  } catch (error) {
-    return formatCommandOutput(error as CommandResult, timeoutMessage);
-  }
+  return formatCommandOutput(await runProcess(operation), timeoutMessage);
 }

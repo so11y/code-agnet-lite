@@ -1,5 +1,6 @@
 import {isEqual} from 'lodash-es';
 import type {InternalState, TurnOperations} from './session-types.js';
+import {createEmptyTurnOperations} from './types/operations.js';
 
 export type InjectedSnapshot = {
   facts: string[];
@@ -34,7 +35,7 @@ export function createInjectedSnapshot(): InjectedSnapshot {
     confidence: 0,
     visitedFiles: [],
     searchedTerms: [],
-    turnOps: {writtenFiles: [], deletedFiles: [], executedCommands: []}
+    turnOps: createEmptyTurnOperations()
   };
 }
 

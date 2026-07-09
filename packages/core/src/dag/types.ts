@@ -1,5 +1,5 @@
 import {BaseMemory} from '../agent-memory.js';
-import type {TurnOperations} from '../session-types.js';
+import type {TurnOperations} from '../types/operations.js';
 
 export type TaskNodeKind = 'explore' | 'edit' | 'verify' | 'merge';
 

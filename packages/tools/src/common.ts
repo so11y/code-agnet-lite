@@ -1,13 +1,15 @@
 import type {AgentTool} from './types.js';
+import {zodToJsonSchema} from 'zod-to-json-schema';
 import {z} from 'zod';
 
+export const PROTECTED_DIR_NAMES = ['.git', 'node_modules'] as const;
+
 export const DEFAULT_IGNORE_GLOBS = [
-  'node_modules/**',
+  ...PROTECTED_DIR_NAMES.map((name) => `${name}/**`),
   'dist/**',
   'build/**',
   'out/**',
-  'coverage/**',
-  '.git/**'
+  'coverage/**'
 ] as const;
 
 export const RG_IGNORE_GLOBS = DEFAULT_IGNORE_GLOBS.map((glob) => `!${glob}`);
@@ -20,52 +22,19 @@ type JsonSchemaObject = {
 };
 
 function zodObjectToJsonSchema(schema: z.AnyZodObject): JsonSchemaObject {
-  const shape = schema.shape;
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
+  const jsonSchema = zodToJsonSchema(schema, {
+    $refStrategy: 'none',
+    target: 'openApi3'
+  }) as Record<string, unknown>;
 
-  for (const [key, value] of Object.entries(shape)) {
-    const field = value as z.ZodTypeAny;
-    const isOptional = field.isOptional();
-    const unwrapped = isOptional && field instanceof z.ZodOptional ? field.unwrap() : field;
-
-    properties[key] = zodFieldToJsonSchema(unwrapped);
-
-    if (!isOptional) {
-      required.push(key);
-    }
-  }
+  const {properties, required} = jsonSchema;
 
   return {
     type: 'object',
-    properties,
-    required,
+    properties: (properties as Record<string, unknown>) ?? {},
+    required: required as string[] | undefined,
     additionalProperties: false
   };
-}
-
-function zodFieldToJsonSchema(field: z.ZodTypeAny): unknown {
-  if (field instanceof z.ZodString) {
-    return {type: 'string', description: field.description};
-  }
-
-  if (field instanceof z.ZodNumber) {
-    return {type: 'number', description: field.description};
-  }
-
-  if (field instanceof z.ZodBoolean) {
-    return {type: 'boolean', description: field.description};
-  }
-
-  if (field instanceof z.ZodArray) {
-    return {
-      type: 'array',
-      items: zodFieldToJsonSchema(field.element),
-      description: field.description
-    };
-  }
-
-  return {type: 'string', description: field.description};
 }
 
 export function createTool<TSchema extends z.AnyZodObject>(config: {

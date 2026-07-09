@@ -4,6 +4,7 @@ import {Box, Text, useInput} from 'ink';
 type Props = {
   disabled: boolean;
   onSubmit(value: string): void;
+  onCancel?(): void;
 };
 
 /** 粘贴多行时，终端常在每行末尾紧跟 Enter；若距上次输入 < 80ms，视为换行而非发送 */
@@ -13,7 +14,7 @@ function normalizePastedText(raw: string): string {
   return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-export function InputBox({disabled, onSubmit}: Props) {
+export function InputBox({disabled, onSubmit, onCancel}: Props) {
   const [value, setValue] = useState('');
   const valueRef = useRef('');
   const lastInputAtRef = useRef(0);
@@ -34,16 +35,19 @@ export function InputBox({disabled, onSubmit}: Props) {
   };
 
   useInput((input, key) => {
+    if (key.ctrl && input === 'c') {
+      if (disabled) {
+        onCancel?.();
+      }
+      return;
+    }
+
     if (disabled) {
       return;
     }
 
     if (key.backspace || key.delete) {
       setInput(valueRef.current.slice(0, -1));
-      return;
-    }
-
-    if (key.ctrl && input === 'c') {
       return;
     }
 
@@ -73,7 +77,7 @@ export function InputBox({disabled, onSubmit}: Props) {
     <Box flexDirection="column" borderStyle="round" borderColor={disabled ? 'gray' : 'cyan'} paddingX={1} minWidth={40}>
       <Text color="gray">输入 </Text>
       {disabled ? (
-        <Text color="gray">正在处理…</Text>
+        <Text color="gray">正在处理… Ctrl+C 终止</Text>
       ) : value ? (
         <Box flexDirection="column">
           {lines.map((line, index) => (
@@ -84,7 +88,7 @@ export function InputBox({disabled, onSubmit}: Props) {
           ))}
         </Box>
       ) : (
-        <Text dimColor>Enter 发送 · 可直接粘贴多行 · @prompt.txt 从文件读取</Text>
+        <Text dimColor>Enter 发送 · 可直接粘贴多行 · @prompt.txt 从文件读取 · /skill &lt;name&gt; 加载 Skill</Text>
       )}
     </Box>
   );

@@ -1,5 +1,6 @@
 import type {AgentSession} from '../session.js';
-import {runDag} from './dag-promise-scheduler.js';
+import {formatError, joinSections} from '@code-agent-lite/shared';
+import {runDag} from './dag-scheduler.js';
 import {llmPlanDag} from './dag-planner.js';
 import {createBlackboard} from './types.js';
 
@@ -29,21 +30,19 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
       session.status('error', 'DAG 未完整完成');
       session.say(
         'system',
-        [
+        joinSections(
           failed.length > 0
             ? `失败节点：${failed.map((node) => `${node.id}（${node.error ?? '未知'}）`).join('；')}`
             : '',
           skipped.length > 0 ? `跳过节点：${skipped.map((node) => node.id).join('、')}` : ''
-        ]
-          .filter(Boolean)
-          .join('\n')
+        )
       );
       return;
     }
 
     session.status('error', 'DAG 未完成 merge 节点');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatError(error);
     session.status('error', message);
     session.say('assistant', message);
     throw error;

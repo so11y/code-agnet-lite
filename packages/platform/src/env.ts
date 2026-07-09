@@ -126,3 +126,59 @@ export function getCursorModelSelection(): CursorModelSelection {
     params: [{id: 'fast', value: fast ? 'true' : 'false'}]
   };
 }
+
+const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  'composer-2.5': 200_000,
+  'composer-2': 200_000,
+  'gpt-4o': 128_000,
+  'gpt-4o-mini': 128_000,
+  'gpt-4.1': 1_047_576,
+  'gpt-4.1-mini': 1_047_576,
+  'gpt-4.1-nano': 1_047_576,
+  'o3': 200_000,
+  'o4-mini': 200_000
+};
+
+function parseContextLimitOverride(): number | undefined {
+  const raw = process.env.CONTEXT_LIMIT?.trim() || process.env.OPENAI_CONTEXT_LIMIT?.trim();
+
+  if (!raw) {
+    return;
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return;
+  }
+
+  return Math.floor(parsed);
+}
+
+export function getActiveModelName(): string {
+  if (getAgentProviderKind() === 'cursor') {
+    return getCursorModel();
+  }
+
+  return getOpenAiModel();
+}
+
+export function getContextLimit(model = getActiveModelName()): number {
+  const override = parseContextLimitOverride();
+
+  if (override) {
+    return override;
+  }
+
+  const normalized = model.trim().toLowerCase();
+
+  if (MODEL_CONTEXT_LIMITS[normalized]) {
+    return MODEL_CONTEXT_LIMITS[normalized];
+  }
+
+  if (normalized.startsWith('composer-')) {
+    return MODEL_CONTEXT_LIMITS['composer-2.5'];
+  }
+
+  return 128_000;
+}

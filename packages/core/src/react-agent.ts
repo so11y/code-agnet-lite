@@ -1,9 +1,9 @@
 import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall} from 'openai/resources/chat/completions';
 import {parseToolArgs} from './openai-message.js';
 import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
-import {truncate, withTimeout} from '@code-agent-lite/shared';
+import {truncate, TurnAbortedError, withTimeout, formatError} from '@code-agent-lite/shared';
 import {AgentSession} from './session.js';
-import type {AgentMessage, AgentOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
+import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';
 
 export type AgentRunResult = {
@@ -16,7 +16,7 @@ export abstract class ReActAgent {
   protected readonly maxSteps: number;
   protected readonly session: AgentSession;
 
-  constructor(protected readonly options: AgentOptions, session: AgentSession) {
+  constructor(protected readonly options: AgentSessionOptions, session: AgentSession) {
     this.maxSteps = options.maxSteps ?? 20;
     this.session = session;
   }
@@ -31,6 +31,8 @@ export abstract class ReActAgent {
 
   private async runLoop(): Promise<AgentRunResult> {
     for (let step = 1; step <= this.maxSteps; step += 1) {
+      this.session.throwIfAborted();
+
       const remaining = this.maxSteps - step + 1;
       this.session.status('thinking', `${step}/${this.maxSteps}`);
 
@@ -43,6 +45,7 @@ export abstract class ReActAgent {
 
       const message = await this.streamLlm(this.buildLlmMessages(), {
         session: this.session,
+        signal: this.session.turnSignal(),
         onReasoningDelta: (delta) => {
           if (!streamedThinking) {
             this.session.startThinkingStream();
@@ -77,6 +80,7 @@ export abstract class ReActAgent {
       }
 
       for (const toolCall of message.tool_calls) {
+        this.session.throwIfAborted();
         await this.runTool(toolCall);
       }
     }
@@ -124,13 +128,19 @@ export abstract class ReActAgent {
       const output = await withTimeout(
         tool.execute(parsed.data, {
           cwd: this.session.cwd,
-          setCwd: (cwd) => this.session.setWorkspace(cwd)
+          setCwd: (cwd) => this.session.setWorkspace(cwd),
+          signal: this.session.turnSignal()
         }),
-        this.toolTimeoutMs()
+        this.toolTimeoutMs(),
+        this.session.turnSignal()
       );
       this.session.finishTool(call.id, truncate(output));
     } catch (error) {
-      this.failTool(call.id, error instanceof Error ? error.message : String(error));
+      if (error instanceof TurnAbortedError) {
+        throw error;
+      }
+
+      this.failTool(call.id, formatError(error));
     }
   }
 

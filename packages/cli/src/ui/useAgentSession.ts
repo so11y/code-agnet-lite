@@ -1,7 +1,8 @@
 import {useCallback, useEffect, useRef} from 'react';
+import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {
   createAgentSession,
-  disposeCursorAgent,
+  disposeAgentSession,
   runAgentTurn,
   type AgentEvent,
   type AgentSession
@@ -13,6 +14,7 @@ type Options = {
 
 export function useAgentSession({onEvent}: Options) {
   const sessionRef = useRef<AgentSession | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
@@ -20,6 +22,7 @@ export function useAgentSession({onEvent}: Options) {
     if (!sessionRef.current) {
       sessionRef.current = createAgentSession({
         cwd,
+        provider: getAgentProviderKind(),
         onEvent: (event) => onEventRef.current(event)
       });
     }
@@ -28,11 +31,14 @@ export function useAgentSession({onEvent}: Options) {
   }, []);
 
   const clearSession = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+
     const session = sessionRef.current;
     sessionRef.current = null;
 
     if (session) {
-      void disposeCursorAgent(session);
+      void disposeAgentSession(session);
     }
   }, []);
 
@@ -40,10 +46,19 @@ export function useAgentSession({onEvent}: Options) {
     clearSession();
   }, [clearSession]);
 
+  const cancelTurn = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   const runTurn = useCallback((input: string, cwd: string) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const session = ensureSession(cwd);
+    session.setTurnSignal(controller.signal);
     return runAgentTurn(session, input, cwd);
   }, [ensureSession]);
 
-  return {clearSession, runTurn};
+  return {clearSession, cancelTurn, runTurn};
 }

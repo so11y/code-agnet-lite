@@ -1,7 +1,10 @@
 import type {AgentTool} from './types.js';
 import {deleteFileTool} from './delete-file.js';
+import {gitDiffTool} from './git-diff.js';
 import {grepTool} from './grep.js';
 import {listFilesTool} from './list-files.js';
+import {loadSkillTool} from './load-skill.js';
+import {listSkillsTool} from './list-skills.js';
 import {readFileTool} from './read-file.js';
 import {runCmdTool} from './run-cmd.js';
 import {setWorkspaceTool} from './set-workspace.js';
@@ -13,8 +16,11 @@ export const tools: AgentTool[] = [
   writeFileTool,
   deleteFileTool,
   grepTool,
+  gitDiffTool,
   webSearchTool,
   listFilesTool,
+  listSkillsTool,
+  loadSkillTool,
   runCmdTool,
   setWorkspaceTool
 ];

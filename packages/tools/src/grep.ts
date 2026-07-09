@@ -1,7 +1,7 @@
-import {execa} from 'execa';
 import {z} from 'zod';
-import {formatCommandOutput, truncate, type CommandResult} from '@code-agent-lite/shared';
+import {executeShellCommand, formatCommandOutput, runCommand, throwIfAborted, truncate} from '@code-agent-lite/shared';
 import {createTool, RG_IGNORE_GLOBS} from './common.js';
+import {runArgvCommand} from './shell.js';
 
 export const grepTool = createTool({
   name: 'grep',
@@ -24,24 +24,19 @@ export const grepTool = createTool({
 
     args.push(input.pattern);
 
-    try {
-      const result = await execa('rg', args, {
-        cwd: context.cwd,
-        reject: false,
-        timeout: input.timeoutMs ?? 10_000
-      });
+    const result = await runArgvCommand('rg', args, {
+      cwd: context.cwd,
+      timeout: input.timeoutMs ?? 10_000
+    });
 
-      if (result.exitCode === 1) {
-        return '未找到匹配项。';
-      }
-
-      if (result.exitCode !== 0) {
-        return formatCommandOutput(result, '搜索超时。');
-      }
-
-      return truncate(result.stdout);
-    } catch (error) {
-      return formatCommandOutput(error as CommandResult, '搜索超时。');
+    if (result.exitCode === 1) {
+      return '未找到匹配项。';
     }
+
+    if (result.exitCode !== 0) {
+      return formatCommandOutput(result, '搜索超时。');
+    }
+
+    return truncate(result.stdout ?? '');
   }
 });

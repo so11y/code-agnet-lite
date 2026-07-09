@@ -2,6 +2,14 @@ import React from 'react';
 import {Box, Text} from 'ink';
 import Spinner from 'ink-spinner';
 import type {AgentStatus, TokenUsage} from '@code-agent-lite/core';
+import {
+  contextUsageColor,
+  formatContextUsagePercent,
+  formatTokenCounts,
+  getContextUsagePercent,
+  hasTokenStats,
+  isAgentBusy
+} from './token-display.js';
 import {compactText} from '@code-agent-lite/shared';
 
 type Props = {
@@ -15,7 +23,8 @@ const statusColor = {
   thinking: 'blue',
   running_tool: 'yellow',
   done: 'green',
-  error: 'red'
+  error: 'red',
+  cancelled: 'magenta'
 } as const;
 
 const statusLabel: Record<AgentStatus, string> = {
@@ -23,7 +32,8 @@ const statusLabel: Record<AgentStatus, string> = {
   thinking: '思考中',
   running_tool: '运行工具',
   done: '完成',
-  error: '错误'
+  error: '错误',
+  cancelled: '已终止'
 };
 
 function formatStatus(status: AgentStatus, message?: string): string {
@@ -37,18 +47,12 @@ function formatStatus(status: AgentStatus, message?: string): string {
   return `${label} · ${detail}`;
 }
 
-function formatTokenUsage(usage: TokenUsage): string {
-  const total = usage.total.toLocaleString('en-US');
-  const prompt = usage.prompt.toLocaleString('en-US');
-  const completion = usage.completion.toLocaleString('en-US');
-
-  return `${total} tokens (in ${prompt} / out ${completion})`;
-}
-
 export function StatusBar({status, message, tokenUsage}: Props) {
-  const busy = status === 'thinking' || status === 'running_tool';
+  const busy = isAgentBusy(status);
   const color = statusColor[status];
   const text = formatStatus(status, message);
+  const contextPercent = tokenUsage ? getContextUsagePercent(tokenUsage) : undefined;
+  const contextLabel = tokenUsage ? formatContextUsagePercent(tokenUsage) : undefined;
 
   return (
     <Box paddingX={1} justifyContent="space-between">
@@ -61,8 +65,18 @@ export function StatusBar({status, message, tokenUsage}: Props) {
           text
         )}
       </Text>
-      {tokenUsage && tokenUsage.total > 0 ? (
-        <Text color="gray">{formatTokenUsage(tokenUsage)}</Text>
+      {tokenUsage && hasTokenStats(tokenUsage) ? (
+        <Text color="gray">
+          {contextLabel && contextPercent !== undefined ? (
+            <>
+              <Text color={contextUsageColor(contextPercent)} bold={contextPercent > 80}>
+                {contextLabel}
+              </Text>
+              {' · '}
+            </>
+          ) : null}
+          {formatTokenCounts(tokenUsage)}
+        </Text>
       ) : null}
     </Box>
   );

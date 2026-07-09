@@ -1,16 +1,15 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import {toolsByName} from '@code-agent-lite/tools';
-import {callLlmStream} from '../llm.js';
-import {ReActAgent} from '../react-agent.js';
-import {SYSTEM_PROMPT} from '../prompt.js';
-import {AgentSession, createAgentSession} from '../session.js';
-import type {AgentEvent, AgentMessage, AgentSessionOptions, LlmStreamOptions} from '../session-types.js';
+import {pickField} from '@code-agent-lite/shared';
 import type {AgentTool} from '@code-agent-lite/tools';
+import {DefaultCodeAgent} from '../code-agent.js';
+import {SYSTEM_PROMPT, formatWorkspaceContext} from '../prompt.js';
+import {AgentSession, createAgentSession} from '../session.js';
+import type {AgentEvent, AgentSessionOptions} from '../session-types.js';
 import type {Blackboard, TaskNode} from './types.js';
 import {createTaskOutput, type TaskOutput} from './types.js';
 import type {ReleaseHandle, ResourceContext} from './resource-context.js';
 
-const EXPLORE_TOOLS = new Set(['read_file', 'grep', 'list_files', 'web_search']);
+const EXPLORE_TOOLS = new Set(['read_file', 'grep', 'list_files', 'web_search', 'git_diff']);
 const BLOCKED_EXPLORE_TOOLS = new Set(['write_file', 'delete_file', 'run_cmd', 'set_workspace']);
 
 const WORKER_PROMPT = `${SYSTEM_PROMPT}
@@ -19,7 +18,7 @@ const WORKER_PROMPT = `${SYSTEM_PROMPT}
 只完成当前节点目标，不要扩展到无关工作。
 上游结论仅供参考，关键判断仍需用工具验证。`;
 
-class WorkerCodeAgent extends ReActAgent {
+class WorkerCodeAgent extends DefaultCodeAgent {
   readonly dynamicReleases: ReleaseHandle[] = [];
 
   constructor(
@@ -32,13 +31,6 @@ class WorkerCodeAgent extends ReActAgent {
     super(options, session);
   }
 
-  protected async streamLlm(
-    messages: AgentMessage[],
-    options: LlmStreamOptions
-  ): Promise<ChatCompletionAssistantMessageParam> {
-    return callLlmStream(messages, options);
-  }
-
   protected findTool(name: string): AgentTool | undefined {
     if (this.readOnly && BLOCKED_EXPLORE_TOOLS.has(name)) {
       return undefined;
@@ -48,11 +40,11 @@ class WorkerCodeAgent extends ReActAgent {
       return undefined;
     }
 
-    return toolsByName.get(name);
+    return super.findTool(name);
   }
 
   protected override async beforeToolExecute(name: string, input: unknown): Promise<boolean> {
-    const filePath = pickPath(input);
+    const filePath = pickField(input, 'path');
 
     switch (name) {
       case 'write_file':
@@ -74,14 +66,6 @@ class WorkerCodeAgent extends ReActAgent {
         return true;
     }
   }
-}
-
-function pickPath(input: unknown): string | undefined {
-  if (!input || typeof input !== 'object' || !('path' in input)) {
-    return;
-  }
-
-  return String((input as {path: unknown}).path);
 }
 
 function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
@@ -143,7 +127,7 @@ export function createWorkerSession(
   session.messages.splice(0, session.messages.length);
   session.messages.push(
     {role: 'system', content: WORKER_PROMPT},
-    {role: 'system', content: `当前工作区：${parentOptions.cwd}`},
+    {role: 'system', content: formatWorkspaceContext(parentOptions.cwd)},
     {role: 'system', content: `Worker 节点：${node.id}（${node.kind}）`}
   );
 

@@ -1,6 +1,5 @@
-import path from 'node:path';
 import {z} from 'zod';
-import {isDirectory} from '@code-agent-lite/platform';
+import {resolveWorkspaceDirectory} from '@code-agent-lite/platform';
 import {createTool} from './common.js';
 
 export const setWorkspaceTool = createTool({
@@ -10,11 +9,7 @@ export const setWorkspaceTool = createTool({
     cwd: z.string().describe('要切换到的绝对或相对目录路径。')
   }),
   async execute(input, context) {
-    const resolved = path.resolve(context.cwd, input.cwd);
-
-    if (!(await isDirectory(resolved))) {
-      throw new Error(`工作区不是有效目录：${resolved}`);
-    }
+    const resolved = await resolveWorkspaceDirectory(context.cwd, input.cwd);
 
     context.setCwd(resolved);
     return `工作区已切换至 ${resolved}`;

@@ -1,4 +1,26 @@
-import path from 'node:path';
+import type {ResourceClaim} from './types.js';
+import {normalizePath} from '@code-agent-lite/shared';
+
+export function claimsConflict(left: ResourceClaim, right: ResourceClaim): boolean {
+  const leftWrites = new Set(left.writes.map(normalizePath));
+  const rightWrites = new Set(right.writes.map(normalizePath));
+  const leftReads = new Set(left.reads.map(normalizePath));
+  const rightReads = new Set(right.reads.map(normalizePath));
+
+  for (const filePath of leftWrites) {
+    if (rightWrites.has(filePath) || rightReads.has(filePath)) {
+      return true;
+    }
+  }
+
+  for (const filePath of rightWrites) {
+    if (leftReads.has(filePath)) {
+      return true;
+    }
+  }
+
+  return left.commands.length > 0 && right.commands.length > 0;
+}
 
 export type ReleaseHandle = () => void;
 
@@ -170,9 +192,4 @@ export function createResourceContext(): ResourceContext {
       return commandLock.acquire(holder);
     }
   };
-}
-
-function normalizePath(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
-  return path.posix.normalize(normalized);
 }

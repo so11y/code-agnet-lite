@@ -1,13 +1,13 @@
 import {stat, unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {z} from 'zod';
-import {resolveInsideCwd} from '@code-agent-lite/shared';
-import {createTool} from './common.js';
+import {normalizePath, resolveInsideCwd} from '@code-agent-lite/shared';
+import {createTool, PROTECTED_DIR_NAMES} from './common.js';
 
-const BLOCKED_SEGMENTS = new Set(['.git', 'node_modules']);
+const BLOCKED_SEGMENTS = new Set<string>(PROTECTED_DIR_NAMES);
 
 function assertDeletable(relativePath: string) {
-  const normalized = relativePath.replace(/\\/g, '/');
+  const normalized = normalizePath(relativePath);
   const segments = normalized.split('/').filter(Boolean);
 
   if (segments.some((segment) => BLOCKED_SEGMENTS.has(segment))) {

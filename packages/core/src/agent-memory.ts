@@ -1,10 +1,7 @@
 import {compact, union} from 'lodash-es';
+import type {TurnOperations} from './types/operations.js';
 
-export type MemoryOperations = {
-  writtenFiles: string[];
-  deletedFiles: string[];
-  executedCommands: string[];
-};
+export type MemoryOperations = TurnOperations;
 
 export type MemoryMergeSource = {
   facts?: string[];

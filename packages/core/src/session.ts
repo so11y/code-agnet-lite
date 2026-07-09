@@ -1,107 +1,89 @@
+import {throwIfAborted} from '@code-agent-lite/shared';
+import type {AgentRule} from '@code-agent-lite/tools';
+import type {Skill} from './skill-registry.js';
+import {createDefaultSkillRegistry, type SkillRegistry} from './skill-registry.js';
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import {compact, union} from 'lodash-es';
-import {messageText} from './openai-message.js';
-import type {CursorAgentHandle} from './provider/types.js';
-import {SYSTEM_PROMPT} from './prompt.js';
+import {StateDeltaProjector} from './state-delta-projector.js';
 import {
-  buildInjectedSnapshot,
-  createInjectedSnapshot,
-  diffInjectedSnapshot,
-  formatStateDelta
-} from './state-ai-view.js';
-import {
-  createInternalState,
-  createTokenUsage,
   type AgentMessage,
   type AgentSessionOptions,
   type AgentStatus,
   type ChatRole,
   type InternalState,
   type LlmOptions,
-  type LlmStreamOptions,
   type ReasoningMode,
   type TokenUsage,
   type ToolCallItem,
   type TurnContext,
   type TurnOperations
 } from './session-types.js';
-
-const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMessage => ({
-  role: 'assistant',
-  content: message.content ?? null,
-  tool_calls: message.tool_calls
-});
-
-type StateListKey = 'visitedFiles' | 'searchedTerms' | 'writtenFiles' | 'deletedFiles' | 'executedCommands';
-
-type ToolTrack = {
-  stateKey: StateListKey;
-  field: string;
-  turnKey?: keyof TurnOperations;
-};
-
-const TOOL_TRACKS: Record<string, ToolTrack> = {
-  read_file: {stateKey: 'visitedFiles', field: 'path'},
-  grep: {stateKey: 'searchedTerms', field: 'pattern'},
-  write_file: {stateKey: 'writtenFiles', field: 'path', turnKey: 'writtenFiles'},
-  delete_file: {stateKey: 'deletedFiles', field: 'path', turnKey: 'deletedFiles'},
-  run_cmd: {stateKey: 'executedCommands', field: 'command', turnKey: 'executedCommands'}
-};
-
-function pickString(input: unknown, field: string): string | undefined {
-  if (!input || typeof input !== 'object' || !(field in input)) {
-    return;
-  }
-
-  return String((input as Record<string, unknown>)[field]);
-}
+import {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
+import {ConversationStore} from './session/conversation-store.js';
+import {SessionEventBus} from './session/event-bus.js';
+import {TurnLedger} from './session/turn-ledger.js';
 
 export class AgentSession {
   cwd: string;
   reasoningMode?: ReasoningMode;
-  cursorAgent?: CursorAgentHandle;
-  cursorAgentCwd?: string;
-  readonly messages: AgentMessage[];
-  /** 程序侧详细 state */
-  readonly state: InternalState;
-  readonly tokenUsage: TokenUsage = createTokenUsage();
-  private turnUserInput = '';
-  private turnOps: TurnOperations = {writtenFiles: [], deletedFiles: [], executedCommands: []};
-  /** AiView：上次已注入 LLM 的投影 baseline */
-  private lastInjected_ = createInjectedSnapshot();
-  private deltaStep_ = 0;
+  readonly toolRegistry: ToolRegistry;
+  readonly skillRegistry: SkillRegistry;
+  private readonly events_: SessionEventBus;
+  private readonly conversation_: ConversationStore;
+  private readonly ledger_: TurnLedger;
+  private readonly stateProjector_ = new StateDeltaProjector();
+  private turnSignal_?: AbortSignal;
+  private loadedSkillNames_ = new Set<string>();
+  private loadedRuleIds_ = new Set<string>();
 
   constructor(readonly options: AgentSessionOptions) {
     this.cwd = options.cwd;
-    this.state = createInternalState();
-    this.messages = [
-      {role: 'system', content: SYSTEM_PROMPT},
-      {role: 'system', content: `当前工作区：${options.cwd}`}
-    ];
+    this.toolRegistry = options.tools ?? createDefaultToolRegistry();
+    this.skillRegistry = options.skills ?? createDefaultSkillRegistry();
+    this.events_ = new SessionEventBus(options.onEvent);
+    this.conversation_ = new ConversationStore(options.cwd, this.events_);
+    this.ledger_ = new TurnLedger();
+  }
+
+  get messages(): AgentMessage[] {
+    return this.conversation_.messages;
+  }
+
+  get state(): InternalState {
+    return this.ledger_.state;
+  }
+
+  get tokenUsage(): TokenUsage {
+    return this.events_.tokenUsage;
   }
 
   beginTurn(userInput: string) {
-    this.turnUserInput = userInput;
-    this.turnOps = {writtenFiles: [], deletedFiles: [], executedCommands: []};
+    this.ledger_.beginTurn(userInput);
+  }
+
+  setTurnSignal(signal?: AbortSignal) {
+    this.turnSignal_ = signal;
+  }
+
+  turnSignal(): AbortSignal | undefined {
+    return this.turnSignal_;
+  }
+
+  throwIfAborted() {
+    throwIfAborted(this.turnSignal_);
+  }
+
+  llmOptions(): LlmOptions {
+    return {session: this, signal: this.turnSignal_};
   }
 
   appendUser(content: string, options?: {emit?: boolean}) {
-    this.messages.push({role: 'user', content});
-    if (options?.emit !== false) {
-      this.say('user', content);
-    }
+    this.conversation_.appendUser(content, options);
   }
 
   flushStateDelta() {
-    const next = buildInjectedSnapshot(this.state, this.turnOps);
-    const delta = diffInjectedSnapshot(this.lastInjected_, next);
-    if (!delta) {
-      return;
-    }
-
-    this.deltaStep_ += 1;
-    this.addSystemNote(formatStateDelta(this.deltaStep_, delta, this.state));
-    this.lastInjected_ = next;
+    this.stateProjector_.flush(this.ledger_.state, this.ledger_.refreshOperations(), (content) =>
+      this.addSystemNote(content)
+    );
   }
 
   buildLlmMessages(): AgentMessage[] {
@@ -110,174 +92,132 @@ export class AgentSession {
   }
 
   applyHypotheses(hypotheses: string[]) {
-    this.state.hypotheses = compact(hypotheses);
+    this.ledger_.applyHypotheses(hypotheses);
   }
 
   rejectHypotheses(hypotheses: string[]) {
-    this.state.rejected = union(this.state.rejected, compact(hypotheses));
+    this.ledger_.rejectHypotheses(hypotheses);
   }
 
   addFacts(facts: string[]) {
-    this.state.facts = union(this.state.facts, compact(facts));
+    this.ledger_.addFacts(facts);
   }
 
   recordToolCall(name: string, input: unknown) {
-    const track = TOOL_TRACKS[name];
-    if (!track) {
-      return;
-    }
-
-    const value = pickString(input, track.field);
-    if (!value) {
-      return;
-    }
-
-    this.state[track.stateKey] = union(this.state[track.stateKey], [value]);
-
-    if (track.turnKey) {
-      this.turnOps[track.turnKey] = union(this.turnOps[track.turnKey], [value]);
-    }
+    this.ledger_.recordToolCall(name, input);
   }
 
   extractLastAssistantText(): string {
-    for (let index = this.messages.length - 1; index >= 0; index -= 1) {
-      const message = this.messages[index];
-      if (message.role === 'assistant') {
-        return messageText(message.content) ?? '';
-      }
-    }
-
-    return '';
+    return this.conversation_.extractLastAssistantText();
   }
 
   refreshOperations(): TurnOperations {
-    return {
-      writtenFiles: [...this.turnOps.writtenFiles],
-      deletedFiles: [...this.turnOps.deletedFiles],
-      executedCommands: [...this.turnOps.executedCommands]
-    };
+    return this.ledger_.refreshOperations();
   }
 
   collectTurnContext(): TurnContext {
-    return {
-      userInput: this.turnUserInput,
-      operations: this.refreshOperations(),
-      assistantText: this.extractLastAssistantText()
-    };
+    return this.ledger_.collectTurnContext(this.extractLastAssistantText());
   }
 
   snapshotProgress() {
-    return {
-      facts: this.state.facts.length,
-      visitedFiles: this.state.visitedFiles.length,
-      searchedTerms: this.state.searchedTerms.length
-    };
+    return this.ledger_.snapshotProgress();
   }
 
   noteProgress(before: ReturnType<AgentSession['snapshotProgress']>) {
-    const after = this.snapshotProgress();
-    const progressed =
-      after.facts > before.facts ||
-      after.visitedFiles > before.visitedFiles ||
-      after.searchedTerms > before.searchedTerms;
+    this.ledger_.noteProgress(before);
+  }
 
-    if (progressed) {
-      this.state.noProgress = 0;
-      return;
+  ensureWorkspace(cwd?: string): string {
+    const target = cwd ?? this.cwd;
+
+    if (target !== this.cwd) {
+      this.setWorkspace(target);
     }
 
-    this.state.noProgress += 1;
+    return target;
   }
 
   recordTokenUsage(usage: TokenUsage) {
-    this.tokenUsage.prompt += usage.prompt;
-    this.tokenUsage.completion += usage.completion;
-    this.tokenUsage.total += usage.total;
-    this.options.onEvent({type: 'token_usage', usage});
-  }
-
-  llmOptions(): LlmOptions {
-    return {session: this};
-  }
-
-  streamOptions(onDelta: (delta: string) => void): LlmStreamOptions {
-    return {session: this, onDelta};
+    this.events_.recordTokenUsage(usage);
   }
 
   status(status: AgentStatus, message?: string) {
-    this.options.onEvent({type: 'status', status, message});
+    this.events_.status(status, message);
   }
 
   say(role: ChatRole, content: string) {
-    this.options.onEvent({type: 'message', role, content});
+    this.events_.say(role, content);
   }
 
   startAssistantStream() {
-    this.options.onEvent({type: 'message_start', role: 'assistant'});
+    this.events_.startAssistantStream();
   }
 
   appendAssistantDelta(delta: string) {
-    this.options.onEvent({type: 'message_delta', delta});
+    this.events_.appendAssistantDelta(delta);
   }
 
   startThinkingStream() {
-    this.options.onEvent({type: 'thinking_start'});
+    this.events_.startThinkingStream();
   }
 
   appendThinkingDelta(delta: string) {
-    this.options.onEvent({type: 'thinking_delta', delta});
+    this.events_.appendThinkingDelta(delta);
   }
 
   endThinkingStream() {
-    this.options.onEvent({type: 'thinking_end'});
+    this.events_.endThinkingStream();
   }
 
   commitAssistant(message: ChatCompletionAssistantMessageParam, streamed: boolean) {
-    this.messages.push(assistantMessage(message));
-
-    if (streamed) {
-      this.options.onEvent({type: 'message_end'});
-      return;
-    }
-
-    const content = messageText(message.content);
-    if (content) {
-      this.say('assistant', content);
-    }
+    this.conversation_.commitAssistant(message, streamed);
   }
 
   addAssistant(message: ChatCompletionAssistantMessageParam) {
-    this.commitAssistant(message, false);
+    this.conversation_.addAssistant(message);
   }
 
   addSystemNote(content: string, options?: {emit?: boolean}) {
-    this.messages.push({role: 'system', content});
-    if (options?.emit !== false) {
-      this.say('system', content);
-    }
+    this.conversation_.addSystemNote(content, options);
+  }
+
+  hasLoadedSkill(name: string): boolean {
+    return this.loadedSkillNames_.has(name);
+  }
+
+  injectSkill(skill: Skill) {
+    this.loadedSkillNames_.add(skill.name);
+    this.addSystemNote(this.skillRegistry.formatForPrompt(skill), {emit: true});
+  }
+
+  hasLoadedRule(id: string): boolean {
+    return this.loadedRuleIds_.has(id);
+  }
+
+  injectRule(rule: AgentRule) {
+    this.loadedRuleIds_.add(rule.id);
+    this.conversation_.injectRule(rule);
+  }
+
+  setSkillCatalog(content: string, cwd: string) {
+    this.conversation_.setSkillCatalog(content, cwd);
+  }
+
+  clearSkillCatalog() {
+    this.conversation_.clearSkillCatalog();
   }
 
   startTool(call: ToolCallItem) {
-    this.status('running_tool', call.name);
-    this.options.onEvent({type: 'tool_start', call});
+    this.events_.startTool(call);
   }
 
   finishTool(id: string, content: string, error?: string) {
-    this.messages.push({role: 'tool', tool_call_id: id, content});
-    this.options.onEvent(error ? {type: 'tool_end', id, error} : {type: 'tool_end', id, output: content});
+    this.conversation_.finishTool(id, content, error);
   }
 
   setWorkspace(cwd: string) {
     this.cwd = cwd;
-    this.options.onEvent({type: 'workspace', cwd});
-  }
-
-  setCursorAgent(agent?: CursorAgentHandle) {
-    this.cursorAgent = agent;
-  }
-
-  setCursorAgentCwd(cwd?: string) {
-    this.cursorAgentCwd = cwd;
+    this.events_.setWorkspace(cwd);
   }
 }
 

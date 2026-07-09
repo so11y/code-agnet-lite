@@ -1,6 +1,5 @@
-import {execaCommand} from 'execa';
 import {z} from 'zod';
-import {runCommand} from '@code-agent-lite/shared';
+import {executeShellCommand, runCommand, throwIfAborted} from '@code-agent-lite/shared';
 import {createTool} from './common.js';
 
 export const runCmdTool = createTool({
@@ -10,11 +9,12 @@ export const runCmdTool = createTool({
     command: z.string().describe('要在当前工作区中执行的 shell 命令。')
   }),
   async execute(input, context) {
+    throwIfAborted(context.signal);
+
     return runCommand(() =>
-      execaCommand(input.command, {
+      executeShellCommand(input.command, {
         cwd: context.cwd,
-        shell: true,
-        reject: false
+        signal: context.signal
       })
     );
   }

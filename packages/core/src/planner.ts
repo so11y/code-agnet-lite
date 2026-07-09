@@ -1,19 +1,13 @@
-import {clamp, compact} from 'lodash-es';
-import {
-  extractAssistantText,
-  formatSessionTranscript,
-  parseAssistantJson
-} from './openai-message.js';
-import {formatError, formatList} from '@code-agent-lite/shared';
+import {clamp} from 'lodash-es';
+import {extractAssistantText, formatSessionTranscript} from './openai-message.js';
+import {formatError, formatList, joinSections} from '@code-agent-lite/shared';
 import {callPlainLlm} from './llm.js';
 import {type Plan, planSchema, type Review, reviewSchema} from './planner-schemas.js';
 import {buildPlanPrompt, REVIEW_TOT_PROMPT} from './prompt.js';
 import type {AgentRunResult} from './react-agent.js';
 import type {AgentSession} from './session.js';
+import {StructuredLlmCaller} from './structured-llm-caller.js';
 
-function joinSections(...parts: Array<string | false | undefined | null>) {
-  return compact(parts).join('\n\n');
-}
 
 function formatPlan(title: string, plan: Plan): string {
   return joinSections(
@@ -56,28 +50,30 @@ async function requestPlan(
   title: string,
   extraContext = ''
 ) {
-  const response = await callPlainLlm(
-    [
+  const plan = await StructuredLlmCaller.callWithHandler({
+    messages: [
       {role: 'system', content: buildPlanPrompt(mode)},
       {
         role: 'user',
         content: joinSections(extraContext, formatStateContext(session), formatSessionTranscript(session.messages))
       }
     ],
-    session.llmOptions()
-  );
+    schema: planSchema,
+    llmOptions: session.llmOptions(),
+    onParseError(response) {
+      const text = extractAssistantText(response);
+      session.addSystemNote(`${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`);
+      return undefined;
+    }
+  });
 
-  const text = extractAssistantText(response);
-
-  try {
-    const plan = parseAssistantJson(response, planSchema);
-    session.applyHypotheses(plan.hypotheses);
-    session.addSystemNote(formatPlan(title, plan));
-    return plan;
-  } catch {
-    session.addSystemNote(`${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`);
+  if (!plan) {
     return undefined;
   }
+
+  session.applyHypotheses(plan.hypotheses);
+  session.addSystemNote(formatPlan(title, plan));
+  return plan;
 }
 
 export async function llmPlan(session: AgentSession) {
@@ -119,8 +115,8 @@ export async function updateStateFromRun(
 ) {
   session.status('thinking', '复盘');
   const runFailed = didRunFail(result, error);
-  const response = await callPlainLlm(
-    [
+  const review = await StructuredLlmCaller.callWithHandler({
+    messages: [
       {role: 'system', content: REVIEW_TOT_PROMPT},
       {
         role: 'user',
@@ -133,30 +129,32 @@ export async function updateStateFromRun(
         )
       }
     ],
-    session.llmOptions()
-  );
-
-  const text = extractAssistantText(response);
-
-  try {
-    const review = parseAssistantJson(response, reviewSchema);
-    session.addSystemNote(formatReview(review, runFailed));
-    session.addFacts(review.facts);
-    session.state.confidence = review.confidence;
-
-    if (runFailed || !review.directionCorrect) {
-      session.rejectHypotheses(review.rejected);
-
-      if (review.hypotheses.length) {
-        session.applyHypotheses(review.hypotheses);
-      }
+    schema: reviewSchema,
+    llmOptions: session.llmOptions(),
+    onParseError(response) {
+      const text = extractAssistantText(response);
+      session.addSystemNote(`运行复盘解析失败。原始输出：\n\n${text}`);
+      return undefined;
     }
+  });
 
-    session.noteProgress(progressBefore);
-    return review;
-  } catch {
-    session.addSystemNote(`运行复盘解析失败。原始输出：\n\n${text}`);
+  if (!review) {
     session.noteProgress(progressBefore);
     return undefined;
   }
+
+  session.addSystemNote(formatReview(review, runFailed));
+  session.addFacts(review.facts);
+  session.state.confidence = review.confidence;
+
+  if (runFailed || !review.directionCorrect) {
+    session.rejectHypotheses(review.rejected);
+
+    if (review.hypotheses.length) {
+      session.applyHypotheses(review.hypotheses);
+    }
+  }
+
+  session.noteProgress(progressBefore);
+  return review;
 }

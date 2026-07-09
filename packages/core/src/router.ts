@@ -1,8 +1,7 @@
 import {z} from 'zod';
-import {parseAssistantJson} from './openai-message.js';
-import {callPlainLlm} from './llm.js';
-import {ROUTER_PROMPT} from './prompt.js';
+import {ROUTER_PROMPT, formatTurnUserMessage} from './prompt.js';
 import type {AgentSession} from './session.js';
+import {StructuredLlmCaller} from './structured-llm-caller.js';
 
 const ROUTE_CONFIDENCE_THRESHOLD = 0.75;
 
@@ -13,40 +12,36 @@ const routeSchema = z.object({
 });
 
 export type ReasoningRoute = z.infer<typeof routeSchema>;
-export type ReasoningMode = ReasoningRoute['mode'];
 
 export async function routeReasoningMode(input: string, session: AgentSession): Promise<ReasoningRoute> {
-  const response = await callPlainLlm(
-    [
+  return StructuredLlmCaller.call({
+    messages: [
       {role: 'system', content: ROUTER_PROMPT},
       {
         role: 'user',
-        content: `当前工作区：${session.cwd}\n\n用户请求：\n${input}`
+        content: formatTurnUserMessage(session.cwd, input)
       }
     ],
-    session.llmOptions()
-  );
-
-  try {
-    const parsed = parseAssistantJson(response, routeSchema);
-
-    if (parsed.mode !== 'react' && parsed.confidence >= ROUTE_CONFIDENCE_THRESHOLD) {
-      return parsed;
-    }
-
-    return {
-      mode: 'react',
-      confidence: parsed.confidence,
-      reason:
-        parsed.mode === 'react'
-          ? parsed.reason
-          : `${parsed.reason}（置信度 ${parsed.confidence.toFixed(2)} 不足，已降级为 react）`
-    };
-  } catch {
-    return {
+    schema: routeSchema,
+    llmOptions: session.llmOptions(),
+    fallback: {
       mode: 'react',
       confidence: 0,
       reason: '路由模型没有返回有效 JSON，因此默认使用 ReAct。'
-    };
-  }
+    },
+    transform(parsed) {
+      if (parsed.mode !== 'react' && parsed.confidence >= ROUTE_CONFIDENCE_THRESHOLD) {
+        return parsed;
+      }
+
+      return {
+        mode: 'react' as const,
+        confidence: parsed.confidence,
+        reason:
+          parsed.mode === 'react'
+            ? parsed.reason
+            : `${parsed.reason}（置信度 ${parsed.confidence.toFixed(2)} 不足，已降级为 react）`
+      };
+    }
+  });
 }
