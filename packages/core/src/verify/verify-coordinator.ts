@@ -5,7 +5,7 @@ import {VERIFY_GATE_PROMPT} from '../prompt.js';
 import type {ReActAgent} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
 import type {ReasoningMode, TurnReview} from '../session-types.js';
-import {runTotTurn} from '../turn/tot-turn.js';
+import {executeReasoningMode} from '../turn/execute-mode.js';
 import {callStructuredLlm} from '../structured-llm-caller.js';
 import {createTaskOutput, type TaskNode, type TaskOutput} from '../dag/types.js';
 import {createEmptyTurnOperations} from '../types/operations.js';
@@ -167,12 +167,8 @@ export class VerifyCoordinator {
     agent: ReActAgent,
     reasoningMode?: ReasoningMode
   ): Promise<void> {
-    if (reasoningMode === 'tot') {
-      await runTotTurn(session, agent);
-      return;
-    }
-
-    await agent.run();
+    const mode = reasoningMode === 'tot' ? 'tot' : 'react';
+    await executeReasoningMode(session, mode, {agent});
   }
 }
 

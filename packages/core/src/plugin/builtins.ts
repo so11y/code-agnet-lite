@@ -1,10 +1,8 @@
-import {supportsToolLoop} from '../code-agent.js';
-import {runDagTurn} from '../dag/orchestrator.js';
 import {agentProviders} from '../provider/provider-registry.js';
 import {routeReasoningMode} from '../router.js';
+import {executeReasoningMode} from '../turn/execute-mode.js';
 import {prepareTurn} from '../turn/prepare-turn.js';
 import {runPostTurnVerify} from '../turn/post-turn.js';
-import {runTotTurnWithRetries} from '../turn/tot-turn.js';
 import type {AgentPlugin} from './types.js';
 
 export function preparePlugin(): AgentPlugin {
@@ -35,30 +33,11 @@ export function modePlugin(): AgentPlugin {
         return;
       }
 
-      if (mode === 'dag') {
-        const succeeded = await runDagTurn(ctx.session, ctx.input);
-        ctx.meta.set('dagSucceeded', succeeded);
-        return;
-      }
-
-      if (!ctx.agent) {
-        return;
-      }
-
-      switch (mode) {
-        case 'react':
-          await ctx.agent.run();
-          return;
-        case 'tot':
-          if (supportsToolLoop(ctx.agent)) {
-            await runTotTurnWithRetries(ctx.session, ctx.agent);
-            return;
-          }
-
-          ctx.session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
-          await ctx.agent.run();
-          return;
-      }
+      await executeReasoningMode(ctx.session, mode, {
+        agent: ctx.agent,
+        input: ctx.input,
+        meta: ctx.meta
+      });
     }
   };
 }

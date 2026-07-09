@@ -1,11 +1,16 @@
-import {Graph, alg} from '@dagrejs/graphlib';
+import type {Graph} from '@dagrejs/graphlib';
+import * as graphlibPkg from '@dagrejs/graphlib';
 import type {TaskGraph, TaskNode} from './types.js';
+
+// tsx wraps pure-ESM deps as { default: ... }; native Node exposes named exports.
+const graphlib = (graphlibPkg as {default?: typeof graphlibPkg}).default ?? graphlibPkg;
+const {Graph: GraphConstructor, alg} = graphlib;
 
 function createGraphFromEdges(
   nodeIds: Iterable<string>,
   edges: Array<{from: string; to: string}>
 ): Graph {
-  const graph = new Graph({directed: true});
+  const graph = new GraphConstructor({directed: true});
 
   for (const id of nodeIds) {
     graph.setNode(id);
@@ -73,7 +78,7 @@ export function buildGraphFromPlan(tasks: Array<{
   writes: string[];
   commands?: string[];
 }>): TaskGraph {
-  const libGraph = new Graph({directed: true});
+  const libGraph = new GraphConstructor({directed: true});
   const nodes = new Map<string, TaskNode>();
   const edges: TaskGraph['edges'] = [];
 
