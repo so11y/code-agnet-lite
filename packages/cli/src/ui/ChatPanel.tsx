@@ -5,6 +5,7 @@ import {compactText} from '@code-agent-lite/shared';
 import {PlanTodoPanel} from './PlanTodoPanel.js';
 import type {PlanTodoState} from './plan-todo.js';
 import type {TranscriptItem} from './transcript.js';
+import {WelcomeHints} from './WelcomeHints.js';
 
 const MAX_TOOL_DETAIL = 2;
 const THINKING_MAX_LINES = 4;
@@ -262,9 +263,7 @@ export function ChatPanel({items, plan}: Props) {
     <Box flexDirection="column" flexGrow={1} borderStyle="single" borderColor="gray" paddingX={1} minHeight={12}>
       {plan ? <PlanTodoPanel plan={plan} /> : null}
       {visible.length === 0 && !plan ? (
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <Text color="gray">输入问题开始对话</Text>
-        </Box>
+        <WelcomeHints />
       ) : (
         renderTranscriptItems(visible)
       )}

@@ -1,10 +1,14 @@
-import React, {useRef, useState} from 'react';
+import React, {useRef} from 'react';
 import {Box, Text, useInput} from 'ink';
 
 type Props = {
   disabled: boolean;
+  value: string;
+  onChange(value: string): void;
   onSubmit(value: string): void;
   onCancel?(): void;
+  suggestionMode?: boolean;
+  onSuggestionNavigate?(action: 'up' | 'down' | 'tab' | 'escape'): boolean;
 };
 
 /** 粘贴多行时，终端常在每行末尾紧跟 Enter；若距上次输入 < 80ms，视为换行而非发送 */
@@ -14,14 +18,21 @@ function normalizePastedText(raw: string): string {
   return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-export function InputBox({disabled, onSubmit, onCancel}: Props) {
-  const [value, setValue] = useState('');
-  const valueRef = useRef('');
+export function InputBox({
+  disabled,
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+  suggestionMode,
+  onSuggestionNavigate
+}: Props) {
+  const valueRef = useRef(value);
+  valueRef.current = value;
   const lastInputAtRef = useRef(0);
 
   const setInput = (next: string) => {
-    valueRef.current = next;
-    setValue(next);
+    onChange(next);
   };
 
   const submitInput = () => {
@@ -44,6 +55,21 @@ export function InputBox({disabled, onSubmit, onCancel}: Props) {
 
     if (disabled) {
       return;
+    }
+
+    if (suggestionMode && onSuggestionNavigate) {
+      if (key.upArrow && onSuggestionNavigate('up')) {
+        return;
+      }
+      if (key.downArrow && onSuggestionNavigate('down')) {
+        return;
+      }
+      if (key.tab && onSuggestionNavigate('tab')) {
+        return;
+      }
+      if (key.escape && onSuggestionNavigate('escape')) {
+        return;
+      }
     }
 
     if (key.backspace || key.delete) {
@@ -88,7 +114,7 @@ export function InputBox({disabled, onSubmit, onCancel}: Props) {
           ))}
         </Box>
       ) : (
-        <Text dimColor>Enter 发送 · 可直接粘贴多行 · @prompt.txt 从文件读取 · /skill &lt;name&gt; 加载 Skill</Text>
+        <Text dimColor>Enter 发送 · 输入 / 查看命令</Text>
       )}
     </Box>
   );

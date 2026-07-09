@@ -1,11 +1,13 @@
 import path from 'node:path';
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
-import {createTokenUsage, isAgentBusy, type AgentEvent, type AgentStatus, type ChatItem, type TokenUsage} from '@code-agent-lite/core';
+import {createTokenUsage, createDefaultSkillRegistry, isAgentBusy, type AgentEvent, type AgentStatus, type ChatItem, type SkillMeta, type TokenUsage} from '@code-agent-lite/core';
 import {getAgentProviderKind, resolveWorkspaceDirectory} from '@code-agent-lite/platform';
 import {formatError, isAbortError} from '@code-agent-lite/shared';
 import {handleSubmit} from '../services/submit-handler.js';
 import {ChatPanel} from './ChatPanel.js';
+import {CommandSuggestionsPanel} from './CommandSuggestionsPanel.js';
+import {applySuggestion, getSuggestions, parseSuggestionContext} from './command-suggestions.js';
 import {InputBox} from './InputBox.js';
 import {StatusBar} from './StatusBar.js';
 import {planFromGraph, type PlanTodoState} from './plan-todo.js';
@@ -23,6 +25,15 @@ export function App({cwd}: Props) {
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string>();
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>(() => createTokenUsage());
+  const [inputValue, setInputValue] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [skills, setSkills] = useState<SkillMeta[]>([]);
+
+  const skillRegistry = useMemo(() => createDefaultSkillRegistry(), []);
+
+  useEffect(() => {
+    void skillRegistry.discover(workspace).then(setSkills);
+  }, [skillRegistry, workspace]);
 
   const appendMessage = useCallback((item: ChatItem) => {
     if (item.role === 'system' && isInternalSystemMessage(item.content)) {
@@ -165,6 +176,9 @@ export function App({cwd}: Props) {
         return;
       }
 
+      setInputValue('');
+      setSelectedIndex(0);
+
       void handleSubmit(input, {
         workspace,
         appendMessage,
@@ -176,6 +190,56 @@ export function App({cwd}: Props) {
       });
     },
     [appendMessage, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
+  );
+
+  const suggestionMode = parseSuggestionContext(inputValue) !== null;
+  const suggestions = useMemo(
+    () => (suggestionMode ? getSuggestions(inputValue, skills) : []),
+    [inputValue, skills, suggestionMode]
+  );
+
+  const handleInputChange = useCallback(
+    (next: string) => {
+      setInputValue(next);
+      setSelectedIndex(0);
+    },
+    []
+  );
+
+  const handleSuggestionNavigate = useCallback(
+    (action: 'up' | 'down' | 'tab' | 'escape') => {
+      if (action === 'escape') {
+        setInputValue('');
+        setSelectedIndex(0);
+        return true;
+      }
+
+      if (action === 'tab') {
+        const item = suggestions[selectedIndex];
+        if (item) {
+          setInputValue(applySuggestion(item));
+          setSelectedIndex(0);
+        }
+        return true;
+      }
+
+      if (suggestions.length === 0) {
+        return false;
+      }
+
+      if (action === 'up') {
+        setSelectedIndex((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
+        return true;
+      }
+
+      if (action === 'down') {
+        setSelectedIndex((current) => (current >= suggestions.length - 1 ? 0 : current + 1));
+        return true;
+      }
+
+      return false;
+    },
+    [selectedIndex, suggestions]
   );
 
   return (
@@ -190,7 +254,18 @@ export function App({cwd}: Props) {
       </Box>
       <Box flexDirection="column">
         <StatusBar status={status} message={statusMessage} tokenUsage={tokenUsage} />
-        <InputBox disabled={busy} onSubmit={submit} onCancel={cancelTurn} />
+        {suggestionMode ? (
+          <CommandSuggestionsPanel input={inputValue} skills={skills} selectedIndex={selectedIndex} />
+        ) : null}
+        <InputBox
+          disabled={busy}
+          value={inputValue}
+          onChange={handleInputChange}
+          onSubmit={submit}
+          onCancel={cancelTurn}
+          suggestionMode={suggestionMode}
+          onSuggestionNavigate={handleSuggestionNavigate}
+        />
       </Box>
     </Box>
   );
