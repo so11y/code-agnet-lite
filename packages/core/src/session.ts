@@ -250,9 +250,11 @@ export class AgentSession {
     this.commitAssistant(message, false);
   }
 
-  addSystemNote(content: string) {
+  addSystemNote(content: string, options?: {emit?: boolean}) {
     this.messages.push({role: 'system', content});
-    this.say('system', content);
+    if (options?.emit !== false) {
+      this.say('system', content);
+    }
   }
 
   startTool(call: ToolCallItem) {

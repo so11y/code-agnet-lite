@@ -93,6 +93,12 @@ export const VERIFY_GATE_PROMPT = `你是代码 Agent 的验证门禁模块。
 只依据提供的操作事实判断，不要猜测未发生的操作。只返回 JSON：
 {"shouldVerify":true|false,"reason":"简短中文原因"}`;
 
+export const WRAP_UP_THRESHOLD = 3;
+
+export function buildWrapUpPrompt(remaining: number): string {
+  return `注意：本轮还剩 ${remaining} 步就达到最大循环次数。请尽快收尾：优先完成当前核心任务，停止不必要的探索，直接给出结论或最终修改。`;
+}
+
 export const REVIEW_TOT_PROMPT = `你在 ReAct 运行后复盘思维树（ToT）的根假设。
 通过将原始根假设与实验过程对比，分析其方向是否正确。
 遵循循环：假设 -> 实验 -> 修正假设。

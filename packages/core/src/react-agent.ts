@@ -1,5 +1,6 @@
 import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall} from 'openai/resources/chat/completions';
 import {parseToolArgs} from './openai-message.js';
+import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
 import {truncate, withTimeout} from '@code-agent-lite/shared';
 import {AgentSession} from './session.js';
 import type {AgentMessage, AgentOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
@@ -30,7 +31,12 @@ export abstract class ReActAgent {
 
   private async runLoop(): Promise<AgentRunResult> {
     for (let step = 1; step <= this.maxSteps; step += 1) {
+      const remaining = this.maxSteps - step + 1;
       this.session.status('thinking', `${step}/${this.maxSteps}`);
+
+      if (remaining <= WRAP_UP_THRESHOLD) {
+        this.session.addSystemNote(buildWrapUpPrompt(remaining), {emit: false});
+      }
 
       let streamed = false;
       let streamedThinking = false;
