@@ -1,4 +1,5 @@
 import {isReActAgent, type CodeAgent} from '../code-agent.js';
+import type {ReActAgent} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
 import {agentProviders} from '../provider/provider-registry.js';
 import {judgeShouldVerify, runVerifyAndFixLoop} from '../verify/index.js';
@@ -13,6 +14,8 @@ export async function runPostTurnVerify(agent: CodeAgent, session: AgentSession)
     return;
   }
 
-  const fixAgent = isReActAgent(agent) ? agent : agentProviders.resolve('openai').provide(session);
+  const fixAgent: ReActAgent = isReActAgent(agent)
+    ? agent
+    : (agentProviders.resolve('openai').provide(session) as ReActAgent);
   await runVerifyAndFixLoop(fixAgent, session, review);
 }

@@ -1,5 +1,7 @@
-import type {ResourceClaim} from './types.js';
 import {normalizePath} from '@code-agent-lite/shared';
+import type {ResourceClaim} from './types.js';
+
+export {Semaphore} from 'async-mutex';
 
 export function claimsConflict(left: ResourceClaim, right: ResourceClaim): boolean {
   const leftWrites = new Set(left.writes.map(normalizePath));
@@ -29,36 +31,6 @@ export type ResourceContext = {
   acquireWrite(filePath: string, holder?: string): Promise<ReleaseHandle>;
   acquireCommand(holder?: string): Promise<ReleaseHandle>;
 };
-
-/** 并发槽位控制，用于 maxParallel */
-export class Semaphore {
-  private available: number;
-  private readonly waitQueue: Array<() => void> = [];
-
-  constructor(max: number) {
-    this.available = max;
-  }
-
-  async acquire(): Promise<void> {
-    if (this.available > 0) {
-      this.available -= 1;
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      this.waitQueue.push(resolve);
-    });
-  }
-
-  release(): void {
-    const next = this.waitQueue.shift();
-    if (next) {
-      next();
-    } else {
-      this.available += 1;
-    }
-  }
-}
 
 type HolderEntry = {
   mode: 'read' | 'write';

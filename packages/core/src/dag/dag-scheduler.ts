@@ -68,7 +68,7 @@ export class DagScheduler {
         return {nodeId: node.id, error: node.error};
       }
 
-      await this.semaphore.acquire();
+      const [, releaseSemaphore] = await this.semaphore.acquire();
 
       try {
         const releases = await this.acquireNodeResources(node);
@@ -99,7 +99,7 @@ export class DagScheduler {
           releases.forEach((release) => release());
         }
       } finally {
-        this.semaphore.release();
+        releaseSemaphore();
       }
     } catch (error) {
       const message = formatError(error);
