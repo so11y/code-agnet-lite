@@ -1,5 +1,6 @@
 import {isEqual} from 'lodash-es';
-import type {InternalState, TurnOperations} from './session-types.js';
+import type {SessionState} from './agent-memory.js';
+import type {TurnOperations} from './session-types.js';
 import {createEmptyTurnOperations} from './types/operations.js';
 
 export type InjectedSnapshot = {
@@ -19,7 +20,9 @@ export type StateDelta = {
   confidence?: {from: number; to: number};
   addedVisited?: string[];
   addedSearched?: string[];
-  turnOps?: TurnOperations;
+  addedWritten?: string[];
+  addedDeleted?: string[];
+  addedCommands?: string[];
 };
 
 const ROLLUP_VISITED_THRESHOLD = 10;
@@ -39,7 +42,7 @@ export function createInjectedSnapshot(): InjectedSnapshot {
   };
 }
 
-export function buildInjectedSnapshot(state: InternalState, turnOps: TurnOperations): InjectedSnapshot {
+export function buildInjectedSnapshot(state: SessionState, turnOps: TurnOperations): InjectedSnapshot {
   return {
     facts: [...state.facts],
     hypotheses: [...state.hypotheses],
@@ -53,6 +56,11 @@ export function buildInjectedSnapshot(state: InternalState, turnOps: TurnOperati
       executedCommands: [...turnOps.executedCommands]
     }
   };
+}
+
+function diffTurnList(prev: string[], next: string[]): string[] | undefined {
+  const added = next.filter((item) => !prev.includes(item));
+  return added.length ? added : undefined;
 }
 
 export function diffInjectedSnapshot(prev: InjectedSnapshot, next: InjectedSnapshot): StateDelta | null {
@@ -76,18 +84,29 @@ export function diffInjectedSnapshot(prev: InjectedSnapshot, next: InjectedSnaps
     delta.confidence = {from: prev.confidence, to: next.confidence};
   }
 
-  const addedVisited = next.visitedFiles.filter((path) => !prev.visitedFiles.includes(path));
-  if (addedVisited.length) {
+  const addedVisited = diffTurnList(prev.visitedFiles, next.visitedFiles);
+  if (addedVisited) {
     delta.addedVisited = addedVisited;
   }
 
-  const addedSearched = next.searchedTerms.filter((term) => !prev.searchedTerms.includes(term));
-  if (addedSearched.length) {
+  const addedSearched = diffTurnList(prev.searchedTerms, next.searchedTerms);
+  if (addedSearched) {
     delta.addedSearched = addedSearched;
   }
 
-  if (!isEqual(prev.turnOps, next.turnOps)) {
-    delta.turnOps = next.turnOps;
+  const addedWritten = diffTurnList(prev.turnOps.writtenFiles, next.turnOps.writtenFiles);
+  if (addedWritten) {
+    delta.addedWritten = addedWritten;
+  }
+
+  const addedDeleted = diffTurnList(prev.turnOps.deletedFiles, next.turnOps.deletedFiles);
+  if (addedDeleted) {
+    delta.addedDeleted = addedDeleted;
+  }
+
+  const addedCommands = diffTurnList(prev.turnOps.executedCommands, next.turnOps.executedCommands);
+  if (addedCommands) {
+    delta.addedCommands = addedCommands;
   }
 
   const hasDelta = Boolean(
@@ -97,7 +116,9 @@ export function diffInjectedSnapshot(prev: InjectedSnapshot, next: InjectedSnaps
       delta.confidence ||
       delta.addedVisited?.length ||
       delta.addedSearched?.length ||
-      delta.turnOps
+      delta.addedWritten?.length ||
+      delta.addedDeleted?.length ||
+      delta.addedCommands?.length
   );
 
   return hasDelta ? delta : null;
@@ -107,7 +128,7 @@ function formatTurnList(label: string, items: string[]): string {
   return `# ${label}: ${items.length ? items.join(', ') : EMPTY_TURN}`;
 }
 
-export function formatStateDelta(step: number, delta: StateDelta, internal: InternalState): string {
+export function formatStateDelta(step: number, delta: StateDelta, internal: SessionState): string {
   const lines = [`[stateΔ step=${step}]`];
 
   for (const fact of delta.addedFacts ?? []) {
@@ -141,10 +162,16 @@ export function formatStateDelta(step: number, delta: StateDelta, internal: Inte
     lines.push(`+ 已搜索: ${term}`);
   }
 
-  if (delta.turnOps) {
-    lines.push(formatTurnList('written this turn', delta.turnOps.writtenFiles));
-    lines.push(formatTurnList('deleted this turn', delta.turnOps.deletedFiles));
-    lines.push(formatTurnList('commands this turn', delta.turnOps.executedCommands));
+  for (const path of delta.addedWritten ?? []) {
+    lines.push(`+ written this turn: ${path}`);
+  }
+
+  for (const path of delta.addedDeleted ?? []) {
+    lines.push(`+ deleted this turn: ${path}`);
+  }
+
+  for (const command of delta.addedCommands ?? []) {
+    lines.push(`+ command this turn: ${command}`);
   }
 
   const totalVisited = internal.visitedFiles.length;

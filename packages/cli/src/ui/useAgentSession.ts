@@ -2,10 +2,9 @@ import {useCallback, useEffect, useRef} from 'react';
 import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {
   agentProviders,
-  createAgentSession,
+  AgentSession,
   runAgentTurn,
-  type AgentEvent,
-  type AgentSession
+  type AgentEvent
 } from '@code-agent-lite/core';
 
 type Options = {
@@ -20,7 +19,7 @@ export function useAgentSession({onEvent}: Options) {
 
   const ensureSession = useCallback((cwd: string) => {
     if (!sessionRef.current) {
-      sessionRef.current = createAgentSession({
+      sessionRef.current = AgentSession.create({
         cwd,
         provider: getAgentProviderKind(),
         onEvent: (event) => onEventRef.current(event)

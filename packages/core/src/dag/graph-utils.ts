@@ -1,77 +1,53 @@
-import type {ResourceClaim, TaskGraph, TaskNode} from './types.js';
+import {Graph, alg} from '@dagrejs/graphlib';
+import type {TaskGraph, TaskNode} from './types.js';
+
+function createGraphFromEdges(
+  nodeIds: Iterable<string>,
+  edges: Array<{from: string; to: string}>
+): Graph {
+  const graph = new Graph({directed: true});
+
+  for (const id of nodeIds) {
+    graph.setNode(id);
+  }
+
+  for (const edge of edges) {
+    if (graph.hasNode(edge.from) && graph.hasNode(edge.to)) {
+      graph.setEdge(edge.from, edge.to);
+    }
+  }
+
+  return graph;
+}
+
+function createGraphFromTaskGraph(taskGraph: TaskGraph): Graph {
+  return createGraphFromEdges(taskGraph.nodes.keys(), taskGraph.edges);
+}
 
 export function getPredecessors(graph: TaskGraph, nodeId: string): string[] {
-  return graph.edges.filter((edge) => edge.to === nodeId).map((edge) => edge.from);
+  const libGraph = createGraphFromTaskGraph(graph);
+  return libGraph.predecessors(nodeId) ?? [];
 }
 
 export function getSuccessors(graph: TaskGraph, nodeId: string): string[] {
-  return graph.edges.filter((edge) => edge.from === nodeId).map((edge) => edge.to);
-}
-
-export function hasPath(graph: TaskGraph, from: string, to: string): boolean {
-  if (from === to) {
-    return true;
-  }
-
-  const queue = [from];
-  const seen = new Set<string>();
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (seen.has(current)) {
-      continue;
-    }
-
-    seen.add(current);
-
-    for (const next of getSuccessors(graph, current)) {
-      if (next === to) {
-        return true;
-      }
-
-      queue.push(next);
-    }
-  }
-
-  return false;
+  const libGraph = createGraphFromTaskGraph(graph);
+  return libGraph.successors(nodeId) ?? [];
 }
 
 export function detectCycle(graph: TaskGraph): string[] | undefined {
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const stack: string[] = [];
+  const libGraph = createGraphFromTaskGraph(graph);
 
-  const visit = (nodeId: string): string[] | undefined => {
-    if (visited.has(nodeId)) {
-      return;
-    }
-
-    if (visiting.has(nodeId)) {
-      const cycleStart = stack.indexOf(nodeId);
-      return cycleStart === -1 ? [nodeId] : stack.slice(cycleStart).concat(nodeId);
-    }
-
-    visiting.add(nodeId);
-    stack.push(nodeId);
-
-    for (const next of getSuccessors(graph, nodeId)) {
-      const cycle = visit(next);
-      if (cycle) {
-        return cycle;
-      }
-    }
-
-    stack.pop();
-    visiting.delete(nodeId);
-    visited.add(nodeId);
-  };
-
-  for (const nodeId of graph.nodes.keys()) {
-    const cycle = visit(nodeId);
-    if (cycle) {
-      return cycle;
-    }
+  if (alg.isAcyclic(libGraph)) {
+    return undefined;
   }
+
+  const cycles = alg.findCycles(libGraph);
+  const cycle = cycles[0];
+  if (!cycle?.length) {
+    return undefined;
+  }
+
+  return [...cycle, cycle[0]];
 }
 
 export function allPredecessorsDone(graph: TaskGraph, node: TaskNode): boolean {
@@ -85,51 +61,7 @@ export function topologicalSortIds(
   ids: string[],
   edges: Array<{from: string; to: string}>
 ): string[] {
-  const idSet = new Set(ids);
-  const indegree = new Map<string, number>();
-  const outgoing = new Map<string, string[]>();
-
-  for (const id of ids) {
-    indegree.set(id, 0);
-    outgoing.set(id, []);
-  }
-
-  for (const edge of edges) {
-    if (!idSet.has(edge.from) || !idSet.has(edge.to)) {
-      continue;
-    }
-
-    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
-    outgoing.get(edge.from)?.push(edge.to);
-  }
-
-  const queue = [...indegree.entries()]
-    .filter(([, degree]) => degree === 0)
-    .map(([id]) => id)
-    .sort();
-
-  const ordered: string[] = [];
-
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    ordered.push(id);
-
-    for (const next of outgoing.get(id) ?? []) {
-      const degree = (indegree.get(next) ?? 1) - 1;
-      indegree.set(next, degree);
-      if (degree === 0) {
-        queue.push(next);
-        queue.sort();
-      }
-    }
-  }
-
-  if (ordered.length < ids.length) {
-    const seen = new Set(ordered);
-    return [...ordered, ...ids.filter((id) => !seen.has(id))];
-  }
-
-  return ordered;
+  return alg.topsort(createGraphFromEdges(ids, edges));
 }
 
 export function buildGraphFromPlan(tasks: Array<{
@@ -141,10 +73,12 @@ export function buildGraphFromPlan(tasks: Array<{
   writes: string[];
   commands?: string[];
 }>): TaskGraph {
+  const libGraph = new Graph({directed: true});
   const nodes = new Map<string, TaskNode>();
   const edges: TaskGraph['edges'] = [];
 
   for (const task of tasks) {
+    libGraph.setNode(task.id);
     nodes.set(task.id, {
       id: task.id,
       kind: task.kind,
@@ -157,33 +91,14 @@ export function buildGraphFromPlan(tasks: Array<{
       dependsOn: task.dependsOn,
       status: 'pending'
     });
+  }
 
+  for (const task of tasks) {
     for (const from of task.dependsOn) {
+      libGraph.setEdge(from, task.id);
       edges.push({from, to: task.id});
     }
   }
 
   return {nodes, edges};
-}
-
-export function validateParallelResourceClaims(
-  graph: TaskGraph,
-  conflict: (left: ResourceClaim, right: ResourceClaim) => boolean
-) {
-  const nodes = [...graph.nodes.values()];
-
-  for (let leftIndex = 0; leftIndex < nodes.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < nodes.length; rightIndex += 1) {
-      const left = nodes[leftIndex];
-      const right = nodes[rightIndex];
-
-      if (hasPath(graph, left.id, right.id) || hasPath(graph, right.id, left.id)) {
-        continue;
-      }
-
-      if (conflict(left.resources, right.resources)) {
-        throw new Error(`并行节点 ${left.id} 与 ${right.id} 存在资源冲突`);
-      }
-    }
-  }
 }

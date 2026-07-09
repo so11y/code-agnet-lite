@@ -1,28 +1,6 @@
 import {normalizePath} from '@code-agent-lite/shared';
-import type {ResourceClaim} from './types.js';
 
 export {Semaphore} from 'async-mutex';
-
-export function claimsConflict(left: ResourceClaim, right: ResourceClaim): boolean {
-  const leftWrites = new Set(left.writes.map(normalizePath));
-  const rightWrites = new Set(right.writes.map(normalizePath));
-  const leftReads = new Set(left.reads.map(normalizePath));
-  const rightReads = new Set(right.reads.map(normalizePath));
-
-  for (const filePath of leftWrites) {
-    if (rightWrites.has(filePath) || rightReads.has(filePath)) {
-      return true;
-    }
-  }
-
-  for (const filePath of rightWrites) {
-    if (leftReads.has(filePath)) {
-      return true;
-    }
-  }
-
-  return left.commands.length > 0 && right.commands.length > 0;
-}
 
 export type ReleaseHandle = () => void;
 

@@ -54,6 +54,10 @@ export class Blackboard extends BaseMemory {
       operations: output.operations
     });
   }
+
+  static create(): Blackboard {
+    return new Blackboard();
+  }
 }
 
 export type SerializedTaskNode = Omit<TaskNode, 'output'> & {
@@ -75,10 +79,6 @@ export const DEFAULT_DAG_OPTIONS: DagSchedulerOptions = {
   maxParallel: 3,
   workerMaxSteps: 20
 };
-
-export function createBlackboard(): Blackboard {
-  return new Blackboard();
-}
 
 export function serializeTaskGraph(graph: TaskGraph): SerializedTaskGraph {
   return {

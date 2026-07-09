@@ -2,14 +2,14 @@ import type {AgentSession} from '../session.js';
 import {formatError, joinSections} from '@code-agent-lite/shared';
 import {runDag} from './dag-scheduler.js';
 import {llmPlanDag} from './dag-planner.js';
-import {createBlackboard} from './types.js';
+import {Blackboard} from './types.js';
 
-export async function runDagTurn(session: AgentSession, input: string): Promise<void> {
+export async function runDagTurn(session: AgentSession, input: string): Promise<boolean> {
   session.reasoningMode = 'dag';
 
   try {
     const graph = await llmPlanDag(input, session);
-    const blackboard = createBlackboard();
+    const blackboard = Blackboard.create();
 
     await runDag(graph, {
       session,
@@ -22,8 +22,12 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
     const skipped = [...graph.nodes.values()].filter((node) => node.status === 'skipped');
 
     if (mergeNode?.status === 'done' && mergeNode.output?.summary) {
-      session.events.status('done', 'DAG 完成');
-      return;
+      session.mergeTurnOperations({
+        writtenFiles: [...blackboard.writtenFiles],
+        deletedFiles: [...blackboard.deletedFiles],
+        executedCommands: [...blackboard.executedCommands]
+      });
+      return true;
     }
 
     if (failed.length > 0 || skipped.length > 0) {
@@ -37,10 +41,11 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
           skipped.length > 0 ? `跳过节点：${skipped.map((node) => node.id).join('、')}` : ''
         )
       );
-      return;
+      return false;
     }
 
     session.events.status('error', 'DAG 未完成 merge 节点');
+    return false;
   } catch (error) {
     const message = formatError(error);
     session.events.status('error', message);

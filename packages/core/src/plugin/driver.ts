@@ -39,17 +39,8 @@ export class PluginDriver {
       await plugin.prepareAgent?.(ctx);
     }
 
-    let finished = false;
     for (const plugin of plugins) {
-      const result = await plugin.execute?.(ctx);
-      if (result?.done) {
-        finished = true;
-        break;
-      }
-    }
-
-    if (finished) {
-      return;
+      await plugin.execute?.(ctx);
     }
 
     for (const plugin of plugins) {
@@ -57,3 +48,5 @@ export class PluginDriver {
     }
   }
 }
+
+export type {PluginTurnContext};

@@ -1,13 +1,11 @@
 import {compact, union} from 'lodash-es';
 import type {TurnOperations} from './types/operations.js';
 
-export type MemoryOperations = TurnOperations;
-
 export type MemoryMergeSource = {
   facts?: string[];
   visitedFiles?: string[];
   searchedTerms?: string[];
-  operations?: MemoryOperations;
+  operations?: TurnOperations;
 };
 
 /** 通用程序侧记忆：文件访问、操作记录、facts */
@@ -23,32 +21,24 @@ export class BaseMemory {
     this.facts = union(this.facts, compact(items));
   }
 
-  protected appendUnique(target: string[], items: string[]) {
-    for (const item of items) {
-      if (!target.includes(item)) {
-        target.push(item);
-      }
-    }
-  }
-
   mergeLists(source: Pick<MemoryMergeSource, 'facts' | 'visitedFiles' | 'searchedTerms'>) {
     if (source.facts?.length) {
       this.addFacts(source.facts);
     }
 
     if (source.visitedFiles?.length) {
-      this.appendUnique(this.visitedFiles, source.visitedFiles);
+      this.visitedFiles = union(this.visitedFiles, source.visitedFiles);
     }
 
     if (source.searchedTerms?.length) {
-      this.appendUnique(this.searchedTerms, source.searchedTerms);
+      this.searchedTerms = union(this.searchedTerms, source.searchedTerms);
     }
   }
 
-  mergeOperations(operations: MemoryOperations) {
-    this.appendUnique(this.writtenFiles, operations.writtenFiles);
-    this.appendUnique(this.deletedFiles, operations.deletedFiles);
-    this.appendUnique(this.executedCommands, operations.executedCommands);
+  mergeOperations(operations: TurnOperations) {
+    this.writtenFiles = union(this.writtenFiles, operations.writtenFiles);
+    this.deletedFiles = union(this.deletedFiles, operations.deletedFiles);
+    this.executedCommands = union(this.executedCommands, operations.executedCommands);
   }
 
   mergeFrom(source: MemoryMergeSource) {
@@ -60,14 +50,14 @@ export class BaseMemory {
   }
 }
 
-/** 单 Agent 推理记忆：在 BaseMemory 上增加 hypotheses / confidence 等 */
-export class AgentMemory extends BaseMemory {
+/** 单 Agent session 状态：在 BaseMemory 上增加 hypotheses / confidence 等 */
+export class SessionState extends BaseMemory {
   hypotheses: string[] = [];
   rejected: string[] = [];
   noProgress = 0;
   confidence = 0;
-}
 
-export function createAgentMemory(): AgentMemory {
-  return new AgentMemory();
+  static create(): SessionState {
+    return new SessionState();
+  }
 }

@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {ROUTER_PROMPT, formatTurnUserMessage} from './prompt.js';
 import type {AgentSession} from './session.js';
-import {StructuredLlmCaller} from './structured-llm-caller.js';
+import {callStructuredLlm} from './structured-llm-caller.js';
 
 const ROUTE_CONFIDENCE_THRESHOLD = 0.75;
 
@@ -14,7 +14,7 @@ const routeSchema = z.object({
 export type ReasoningRoute = z.infer<typeof routeSchema>;
 
 export async function routeReasoningMode(input: string, session: AgentSession): Promise<ReasoningRoute> {
-  return StructuredLlmCaller.call({
+  return callStructuredLlm({
     messages: [
       {role: 'system', content: ROUTER_PROMPT},
       {

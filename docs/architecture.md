@@ -27,10 +27,10 @@ packages/
 CLI runTurn
   → runAgentTurn (loop.ts)
       → PluginDriver.run
-          skill      加载 Skill / Rule
+          prepare    Skill / Rule / beginTurn
           router     选择 react | tot | dag
           provider   创建 CodeAgent (openai / cursor)
-          react/tot/dag  执行
+          mode       按路由执行 react / tot / dag
           verify     可选验证
   → 出错: abort 在 core 处理；其它错误 throw 给 CLI
 ```
@@ -111,10 +111,10 @@ LLM API（router / planner / verify）走 `resolveLlmProvider()` → `providerRe
 `defaultPlugins()` 固定顺序，provider 差异只在 `providerRegistry.plugin()`：
 
 ```
-skill → router → provider → react → tot → dag → verify
+prepare → router → provider → mode → verify
 ```
 
-扩展方式：自定义 `session.options.plugins` 替换整条链，或仿 builtins 增删 plugin。
+扩展方式：自定义 `session.options.plugins` 替换整条链，或仿 builtins 增删 plugin。`react/tot/dag` 已合并为 `modePlugin`。
 
 ---
 

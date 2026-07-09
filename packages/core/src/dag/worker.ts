@@ -2,8 +2,8 @@ import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/co
 import {pickField} from '@code-agent-lite/shared';
 import type {AgentTool} from '@code-agent-lite/tools';
 import {DefaultCodeAgent} from '../code-agent.js';
-import {SYSTEM_PROMPT, formatWorkspaceContext} from '../prompt.js';
-import {AgentSession, createAgentSession} from '../session.js';
+import {SYSTEM_PROMPT, createWorkspaceSystemMessages} from '../prompt.js';
+import {AgentSession} from '../session.js';
 import type {AgentEvent, AgentSessionOptions} from '../session-types.js';
 import type {Blackboard, TaskNode} from './types.js';
 import {createTaskOutput, type TaskOutput} from './types.js';
@@ -12,9 +12,7 @@ import type {ReleaseHandle, ResourceContext} from './resource-context.js';
 const EXPLORE_TOOLS = new Set(['read_file', 'grep', 'list_files', 'web_search', 'git_diff']);
 const BLOCKED_EXPLORE_TOOLS = new Set(['write_file', 'delete_file', 'run_cmd', 'set_workspace']);
 
-const WORKER_PROMPT = `${SYSTEM_PROMPT}
-
-你正在作为 DAG Worker 执行单个子任务。
+const WORKER_ROLE_PROMPT = `你正在作为 DAG Worker 执行单个子任务。
 只完成当前节点目标，不要扩展到无关工作。
 上游结论仅供参考，关键判断仍需用工具验证。`;
 
@@ -117,7 +115,7 @@ export function createWorkerSession(
   parentOptions: AgentSessionOptions,
   workerMaxSteps: number
 ): AgentSession {
-  const session = createAgentSession({
+  const session = AgentSession.create({
     cwd: parentOptions.cwd,
     maxSteps: workerMaxSteps,
     provider: parentOptions.provider,
@@ -126,8 +124,7 @@ export function createWorkerSession(
 
   session.messages.splice(0, session.messages.length);
   session.messages.push(
-    {role: 'system', content: WORKER_PROMPT},
-    {role: 'system', content: formatWorkspaceContext(parentOptions.cwd)},
+    ...createWorkspaceSystemMessages(parentOptions.cwd, `${SYSTEM_PROMPT}\n\n${WORKER_ROLE_PROMPT}`),
     {role: 'system', content: `Worker 节点：${node.id}（${node.kind}）`}
   );
 

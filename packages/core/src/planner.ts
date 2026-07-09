@@ -1,12 +1,11 @@
 import {clamp} from 'lodash-es';
 import {extractAssistantText, formatSessionTranscript} from './openai-message.js';
 import {formatError, formatList, joinSections} from '@code-agent-lite/shared';
-import {callPlainLlm} from './llm.js';
 import {type Plan, planSchema, type Review, reviewSchema} from './planner-schemas.js';
 import {buildPlanPrompt, REVIEW_TOT_PROMPT} from './prompt.js';
 import type {AgentRunResult} from './react-agent.js';
 import type {AgentSession} from './session.js';
-import {StructuredLlmCaller} from './structured-llm-caller.js';
+import {callStructuredLlmWithHandler} from './structured-llm-caller.js';
 
 
 function formatPlan(title: string, plan: Plan): string {
@@ -50,7 +49,7 @@ async function requestPlan(
   title: string,
   extraContext = ''
 ) {
-  const plan = await StructuredLlmCaller.callWithHandler({
+  const plan = await callStructuredLlmWithHandler({
     messages: [
       {role: 'system', content: buildPlanPrompt(mode)},
       {
@@ -115,7 +114,7 @@ export async function updateStateFromRun(
 ) {
   session.events.status('thinking', '复盘');
   const runFailed = didRunFail(result, error);
-  const review = await StructuredLlmCaller.callWithHandler({
+  const review = await callStructuredLlmWithHandler({
     messages: [
       {role: 'system', content: REVIEW_TOT_PROMPT},
       {

@@ -1,26 +1,35 @@
 import {pickField} from '@code-agent-lite/shared';
 import {compact, union} from 'lodash-es';
-import type {InternalState, TurnOperations, TurnSummary} from '../session-types.js';
-import {createInternalState} from '../session-types.js';
+import {SessionState} from '../agent-memory.js';
+import type {TurnOperations, TurnSummary} from '../session-types.js';
 import {createEmptyTurnOperations} from '../types/operations.js';
-type StateListKey = 'visitedFiles' | 'searchedTerms' | 'writtenFiles' | 'deletedFiles' | 'executedCommands';
 
-type ToolTrack = {
-  stateKey: StateListKey;
+type SessionListKey = 'visitedFiles' | 'searchedTerms';
+type TurnListKey = keyof TurnOperations;
+
+type SessionToolTrack = {
+  stateKey: SessionListKey;
   field: string;
-  turnKey?: keyof TurnOperations;
 };
 
-const TOOL_TRACKS: Record<string, ToolTrack> = {
+type TurnToolTrack = {
+  field: string;
+  turnKey: TurnListKey;
+};
+
+const SESSION_TOOL_TRACKS: Record<string, SessionToolTrack> = {
   read_file: {stateKey: 'visitedFiles', field: 'path'},
-  grep: {stateKey: 'searchedTerms', field: 'pattern'},
-  write_file: {stateKey: 'writtenFiles', field: 'path', turnKey: 'writtenFiles'},
-  delete_file: {stateKey: 'deletedFiles', field: 'path', turnKey: 'deletedFiles'},
-  run_cmd: {stateKey: 'executedCommands', field: 'command', turnKey: 'executedCommands'}
+  grep: {stateKey: 'searchedTerms', field: 'pattern'}
+};
+
+const TURN_TOOL_TRACKS: Record<string, TurnToolTrack> = {
+  write_file: {field: 'path', turnKey: 'writtenFiles'},
+  delete_file: {field: 'path', turnKey: 'deletedFiles'},
+  run_cmd: {field: 'command', turnKey: 'executedCommands'}
 };
 
 export class TurnLedger {
-  readonly state: InternalState = createInternalState();
+  readonly state: SessionState = SessionState.create();
   private turnUserInput = '';
   private turnOps: TurnOperations = createEmptyTurnOperations();
 
@@ -42,21 +51,32 @@ export class TurnLedger {
   }
 
   recordToolCall(name: string, input: unknown) {
-    const track = TOOL_TRACKS[name];
-    if (!track) {
+    const sessionTrack = SESSION_TOOL_TRACKS[name];
+    if (sessionTrack) {
+      const value = pickField(input, sessionTrack.field);
+      if (value) {
+        this.state[sessionTrack.stateKey] = union(this.state[sessionTrack.stateKey], [value]);
+      }
       return;
     }
 
-    const value = pickField(input, track.field);
+    const turnTrack = TURN_TOOL_TRACKS[name];
+    if (!turnTrack) {
+      return;
+    }
+
+    const value = pickField(input, turnTrack.field);
     if (!value) {
       return;
     }
 
-    this.state[track.stateKey] = union(this.state[track.stateKey], [value]);
+    this.turnOps[turnTrack.turnKey] = union(this.turnOps[turnTrack.turnKey], [value]);
+  }
 
-    if (track.turnKey) {
-      this.turnOps[track.turnKey] = union(this.turnOps[track.turnKey], [value]);
-    }
+  mergeTurnOperations(operations: TurnOperations) {
+    this.turnOps.writtenFiles = union(this.turnOps.writtenFiles, operations.writtenFiles);
+    this.turnOps.deletedFiles = union(this.turnOps.deletedFiles, operations.deletedFiles);
+    this.turnOps.executedCommands = union(this.turnOps.executedCommands, operations.executedCommands);
   }
 
   refreshOperations(): TurnOperations {

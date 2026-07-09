@@ -1,9 +1,8 @@
 import {formatSchemaForPrompt} from '../planner-schemas.js';
 import {DAG_PLAN_PROMPT, formatTurnUserMessage} from '../prompt.js';
 import type {AgentSession} from '../session.js';
-import {StructuredLlmCaller} from '../structured-llm-caller.js';
-import {buildGraphFromPlan, detectCycle, validateParallelResourceClaims} from './graph-utils.js';
-import {claimsConflict} from './resource-context.js';
+import {callStructuredLlmOrThrow} from '../structured-llm-caller.js';
+import {buildGraphFromPlan, detectCycle} from './graph-utils.js';
 import {dagPlanSchema, type DagPlan} from './dag-schemas.js';
 import type {TaskGraph} from './types.js';
 
@@ -12,7 +11,7 @@ const DAG_JSON_SCHEMA = formatSchemaForPrompt(dagPlanSchema);
 export async function llmPlanDag(input: string, session: AgentSession): Promise<TaskGraph> {
   session.events.status('thinking', 'DAG 规划');
 
-  const plan = await StructuredLlmCaller.callOrThrow({
+  const plan = await callStructuredLlmOrThrow({
     messages: [
       {role: 'system', content: `${DAG_PLAN_PROMPT}\n\n只返回 JSON，并符合以下 JSON Schema：\n${DAG_JSON_SCHEMA}`},
       {
@@ -44,8 +43,6 @@ export async function llmPlanDag(input: string, session: AgentSession): Promise<
   if (cycle) {
     throw new Error(`DAG 规划存在环：${cycle.join(' → ')}`);
   }
-
-  validateParallelResourceClaims(graph, claimsConflict);
 
   return graph;
 }

@@ -1,5 +1,4 @@
 import {describe, expect, it, vi} from 'vitest';
-import type {AgentSession} from '../../src/session.js';
 import type {AgentMessage, LlmStreamOptions} from '../../src/session-types.js';
 
 vi.mock('../../src/router.js', () => ({
@@ -29,12 +28,6 @@ vi.mock('../../src/provider/openai-provider.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/llm.js', () => ({
-  callLlm: vi.fn(),
-  callPlainLlm: vi.fn(),
-  callLlmStream: vi.fn()
-}));
-
 vi.mock('../../src/verify/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/verify/index.js')>();
   return {
@@ -49,13 +42,13 @@ vi.mock('../../src/verify/index.js', async (importOriginal) => {
 import type {AgentEvent} from '../../src/types/events.js';
 import {defaultPlugins, PluginDriver} from '../../src/plugin/index.js';
 import {runAgentTurn} from '../../src/loop.js';
-import {createAgentSession} from '../../src/session.js';
+import {AgentSession} from '../../src/session.js';
 
 /** 不传 plugins，runAgentTurn 内部会走 defaultPlugins(provider)。 */
 function createDebugSession() {
   const events: AgentEvent[] = [];
 
-  const session = createAgentSession({
+  const session = AgentSession.create({
     cwd: process.cwd(),
     provider: 'openai',
     onEvent: (event) => events.push(event)

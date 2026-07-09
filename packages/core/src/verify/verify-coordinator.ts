@@ -4,8 +4,9 @@ import {llmReplan} from '../planner.js';
 import {VERIFY_GATE_PROMPT} from '../prompt.js';
 import type {ReActAgent} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
-import type {TurnReview} from '../session-types.js';
-import {StructuredLlmCaller} from '../structured-llm-caller.js';
+import type {ReasoningMode, TurnReview} from '../session-types.js';
+import {runTotTurn} from '../turn/tot-turn.js';
+import {callStructuredLlm} from '../structured-llm-caller.js';
 import {createTaskOutput, type TaskNode, type TaskOutput} from '../dag/types.js';
 import {createEmptyTurnOperations} from '../types/operations.js';
 import {discoverVerifyCommands} from './verify-discovery.js';
@@ -73,7 +74,7 @@ export class VerifyCoordinator {
     const summary = session.collectTurnSummary();
     session.events.status('thinking', '验证门禁');
 
-    const gate = await StructuredLlmCaller.call({
+    const gate = await callStructuredLlm({
       messages: [
         {role: 'system', content: VERIFY_GATE_PROMPT},
         {role: 'user', content: formatTurnSummaryForGate(summary)}
@@ -86,7 +87,12 @@ export class VerifyCoordinator {
     return {...summary, gate};
   }
 
-  async runFixLoop(agent: ReActAgent, session: AgentSession, review: TurnReview): Promise<void> {
+  async runFixLoop(
+    agent: ReActAgent,
+    session: AgentSession,
+    review: TurnReview,
+    reasoningMode?: ReasoningMode
+  ): Promise<void> {
     const commands = await this.discover();
 
     if (commands.length === 0) {
@@ -145,12 +151,40 @@ export class VerifyCoordinator {
         session.appendUser(
           `${formatVerifyFailure(failures, MAX_FIX_ROUNDS)}\n\n先前修复方向可能不对，已换思路，请重新尝试。`
         );
+        await this.runFixAttempt(session, agent, reasoningMode);
+        fixRound += 1;
         continue;
       }
 
       session.appendUser(formatVerifyFailure(failures, fixRound + 1));
-      await agent.run();
+      await this.runFixAttempt(session, agent, reasoningMode);
       fixRound += 1;
     }
   }
+
+  private async runFixAttempt(
+    session: AgentSession,
+    agent: ReActAgent,
+    reasoningMode?: ReasoningMode
+  ): Promise<void> {
+    if (reasoningMode === 'tot') {
+      await runTotTurn(session, agent);
+      return;
+    }
+
+    await agent.run();
+  }
+}
+
+export async function judgeShouldVerify(session: AgentSession): Promise<TurnReview> {
+  return VerifyCoordinator.judgeGate(session);
+}
+
+export async function runVerifyAndFixLoop(
+  agent: ReActAgent,
+  session: AgentSession,
+  review: TurnReview,
+  reasoningMode?: ReasoningMode
+): Promise<void> {
+  await new VerifyCoordinator(session.cwd).runFixLoop(agent, session, review, reasoningMode);
 }

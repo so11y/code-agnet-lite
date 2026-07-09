@@ -1,15 +1,15 @@
-import {isReActAgent} from '../code-agent.js';
+import {supportsToolLoop} from '../code-agent.js';
 import {runDagTurn} from '../dag/orchestrator.js';
 import {agentProviders} from '../provider/provider-registry.js';
 import {routeReasoningMode} from '../router.js';
 import {prepareTurn} from '../turn/prepare-turn.js';
 import {runPostTurnVerify} from '../turn/post-turn.js';
-import {runTotTurn} from '../turn/tot-turn.js';
+import {runTotTurnWithRetries} from '../turn/tot-turn.js';
 import type {AgentPlugin} from './types.js';
 
-export function skillPlugin(): AgentPlugin {
+export function preparePlugin(): AgentPlugin {
   return {
-    name: 'skill',
+    name: 'prepare',
     async transformInput(input, ctx) {
       return prepareTurn(ctx.session, input, ctx.cwd);
     }
@@ -26,50 +26,39 @@ export function routerPlugin(): AgentPlugin {
   };
 }
 
-export function reactPlugin(): AgentPlugin {
+export function modePlugin(): AgentPlugin {
   return {
-    name: 'react',
+    name: 'mode',
     async execute(ctx) {
-      if (ctx.route?.mode !== 'react' || !ctx.agent) {
+      const mode = ctx.route?.mode;
+      if (!mode) {
         return;
       }
 
-      await ctx.agent.run();
-      return {done: false};
-    }
-  };
-}
-
-export function totPlugin(): AgentPlugin {
-  return {
-    name: 'tot',
-    async execute(ctx) {
-      if (ctx.route?.mode !== 'tot' || !ctx.agent) {
+      if (mode === 'dag') {
+        const succeeded = await runDagTurn(ctx.session, ctx.input);
+        ctx.meta.set('dagSucceeded', succeeded);
         return;
       }
 
-      if (!isReActAgent(ctx.agent)) {
-        ctx.session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
-        await ctx.agent.run();
-        return {done: false};
-      }
-
-      await runTotTurn(ctx.session, ctx.agent);
-      return {done: false};
-    }
-  };
-}
-
-export function dagPlugin(): AgentPlugin {
-  return {
-    name: 'dag',
-    async execute(ctx) {
-      if (ctx.route?.mode !== 'dag') {
+      if (!ctx.agent) {
         return;
       }
 
-      await runDagTurn(ctx.session, ctx.input);
-      return {done: true};
+      switch (mode) {
+        case 'react':
+          await ctx.agent.run();
+          return;
+        case 'tot':
+          if (supportsToolLoop(ctx.agent)) {
+            await runTotTurnWithRetries(ctx.session, ctx.agent);
+            return;
+          }
+
+          ctx.session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
+          await ctx.agent.run();
+          return;
+      }
     }
   };
 }
@@ -82,19 +71,27 @@ export function verifyPlugin(): AgentPlugin {
         return;
       }
 
+      if (ctx.route?.mode === 'dag' && ctx.meta.get('dagSucceeded') === false) {
+        return;
+      }
+
       await runPostTurnVerify(ctx.agent, ctx.session);
     }
   };
 }
 
 export function defaultPlugins(): AgentPlugin[] {
-  return [
-    skillPlugin(),
-    routerPlugin(),
-    agentProviders.plugin(),
-    reactPlugin(),
-    totPlugin(),
-    dagPlugin(),
-    verifyPlugin()
-  ];
+  return [preparePlugin(), routerPlugin(), agentProviders.plugin(), modePlugin(), verifyPlugin()];
 }
+
+/** @deprecated 使用 preparePlugin */
+export const skillPlugin = preparePlugin;
+
+/** @deprecated 合并进 modePlugin */
+export const reactPlugin = modePlugin;
+
+/** @deprecated 合并进 modePlugin */
+export const totPlugin = modePlugin;
+
+/** @deprecated 合并进 modePlugin */
+export const dagPlugin = modePlugin;

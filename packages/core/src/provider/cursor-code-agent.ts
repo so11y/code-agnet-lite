@@ -1,8 +1,11 @@
 import {throwIfAborted} from '@code-agent-lite/shared';
 import type {AgentTool} from '@code-agent-lite/tools';
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionAssistantMessageParam,
+  ChatCompletionMessageToolCall
+} from 'openai/resources/chat/completions';
 import type {AgentSession} from '../session.js';
-import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} from '../session-types.js';
+import type {AgentMessage, LlmStreamOptions, ToolCallItem} from '../session-types.js';
 import {ReActAgent, type AgentRunResult} from '../react-agent.js';
 import {
   mapCursorStreamEvent,
@@ -19,6 +22,7 @@ export class CursorCodeAgent extends ReActAgent {
 
     const agent = await getCursorSessionPool().ensure(this.session, this.session.cwd);
     const openTools = new Map<string, ToolCallItem>();
+    const completedToolCalls: ChatCompletionMessageToolCall[] = [];
     let assistantStreamStarted = false;
 
     const userInput = this.session.collectTurnSummary().userInput;
@@ -34,7 +38,10 @@ export class CursorCodeAgent extends ReActAgent {
         assistantStreamStarted = true;
       }
 
-      if (mapCursorStreamEvent(message, this.cursorStreamSink(), openTools) === 'usage') {
+      if (
+        mapCursorStreamEvent(message, this.cursorStreamSink(completedToolCalls), openTools) ===
+        'usage'
+      ) {
         recordedUsageFromStream = true;
       }
     }
@@ -52,11 +59,12 @@ export class CursorCodeAgent extends ReActAgent {
     }
 
     const text = result.result?.trim();
+    const toolCalls = completedToolCalls.length ? completedToolCalls : undefined;
 
     if (assistantStreamStarted) {
-      this.session.commitAssistant({role: 'assistant', content: text || null}, true);
-    } else if (text) {
-      this.session.events.say('assistant', text);
+      this.session.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, true);
+    } else if (text || toolCalls) {
+      this.session.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, false);
     } else if (result.status !== 'error') {
       this.session.events.say('assistant', '（Cursor Agent 未返回文本）');
     }
@@ -64,10 +72,24 @@ export class CursorCodeAgent extends ReActAgent {
     return {completed: true, steps: 1, reason: 'final_answer'};
   }
 
-  private cursorStreamSink(): CursorStreamMapperSink {
+  private cursorStreamSink(completedToolCalls: ChatCompletionMessageToolCall[]): CursorStreamMapperSink {
     return {
       startTool: (call) => this.session.events.startTool(call),
-      finishTool: (id, output, options) => this.session.finishTool(id, output, options),
+      finishTool: (id, output, options) => {
+        if (options?.toolName) {
+          this.session.recordToolCall(options.toolName, options.toolInput ?? {});
+          completedToolCalls.push({
+            id,
+            type: 'function',
+            function: {
+              name: options.toolName,
+              arguments: JSON.stringify(options.toolInput ?? {})
+            }
+          });
+        }
+
+        this.session.finishTool(id, output, options);
+      },
       appendAssistantDelta: (text) => this.session.events.appendAssistantDelta(text),
       recordTokenUsage: (usage) => this.session.events.recordTokenUsage(usage)
     };

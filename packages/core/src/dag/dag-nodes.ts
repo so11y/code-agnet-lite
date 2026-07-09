@@ -3,9 +3,8 @@ import {VerifyCoordinator} from '../verify/verify-coordinator.js';
 import type {Blackboard, TaskNode} from './types.js';
 import {createTaskOutput, type TaskOutput} from './types.js';
 import {extractAssistantText} from '../openai-message.js';
-import {callPlainLlm} from '../llm.js';
+import {openAiLlm} from '../provider/openai-provider.js';
 import {formatUserRequest} from '../prompt.js';
-import {createEmptyTurnOperations} from '../types/operations.js';
 
 export async function runVerifyNode(node: TaskNode, cwd: string): Promise<TaskOutput> {
   return new VerifyCoordinator(cwd).runNodeVerify(node);
@@ -33,7 +32,7 @@ export async function runMergeNode(
 
   session.events.status('thinking', 'Merge Agent');
 
-  const response = await callPlainLlm(
+  const response = await openAiLlm.plainChat(
     [
       {role: 'system', content: '你是 Merge Agent，负责汇总多个 Worker 的结果，生成用户可见的最终回答。'},
       {role: 'user', content: merged}
@@ -46,7 +45,11 @@ export async function runMergeNode(
 
   return createTaskOutput({
     summary,
-    operations: createEmptyTurnOperations(),
+    operations: {
+      writtenFiles: [...blackboard.writtenFiles],
+      deletedFiles: [...blackboard.deletedFiles],
+      executedCommands: [...blackboard.executedCommands]
+    },
     facts: [...blackboard.facts]
   });
 }

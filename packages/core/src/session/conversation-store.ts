@@ -2,7 +2,7 @@ import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/co
 import type {AgentRule} from '@code-agent-lite/tools';
 import {formatRuleForPrompt} from '@code-agent-lite/tools';
 import {messageText} from '../openai-message.js';
-import {SYSTEM_PROMPT, formatWorkspaceContext} from '../prompt.js';
+import {createWorkspaceSystemMessages} from '../prompt.js';
 import type {AgentMessage, ChatRole} from '../session-types.js';
 import type {SessionEventBus} from './event-bus.js';
 import type {FinishToolOptions} from './finish-tool-options.js';
@@ -22,10 +22,7 @@ export class ConversationStore {
     cwd: string,
     private readonly events: SessionEventBus
   ) {
-    this.messages = [
-      {role: 'system', content: SYSTEM_PROMPT},
-      {role: 'system', content: formatWorkspaceContext(cwd)}
-    ];
+    this.messages = createWorkspaceSystemMessages(cwd);
   }
 
   appendUser(content: string, options?: {emit?: boolean}) {

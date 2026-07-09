@@ -1,37 +1,94 @@
 import {isEmpty} from 'lodash-es';
-import type {ReActAgent} from '../react-agent.js';
+import type {Review} from '../planner-schemas.js';
 import {llmPlan, llmReplan, updateStateFromRun} from '../planner.js';
+import type {AgentRunResult, ReActAgent} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
 
-export async function runTotTurn(session: AgentSession, agent: ReActAgent): Promise<void> {  while (true) {
+export const MAX_TOT_RETRIES = 3;
+export const TOT_CONFIDENCE_TARGET = 0.9;
+
+export type TotTurnResult = {
+  run: AgentRunResult;
+  review?: Review;
+  directionCorrect: boolean;
+  confidence: number;
+};
+
+export function shouldContinueTot(result: TotTurnResult): boolean {
+  return !(
+    result.run.completed &&
+    result.directionCorrect &&
+    result.confidence >= TOT_CONFIDENCE_TARGET
+  );
+}
+
+/** 单次 ToT：规划（若无假设）→ ReAct → 复盘 */
+export async function runTotTurn(session: AgentSession, agent: ReActAgent): Promise<TotTurnResult> {
+  session.throwIfAborted();
+
+  if (isEmpty(session.state.hypotheses)) {
+    await llmPlan(session);
+  }
+
+  const progressBefore = session.snapshotProgress();
+
+  let run: AgentRunResult;
+  try {
+    run = await agent.run();
+  } catch (error) {
+    const review = await updateStateFromRun(
+      session,
+      {completed: false, steps: 0, reason: 'max_steps'},
+      error,
+      progressBefore
+    );
+    throw error;
+  }
+
+  const review = await updateStateFromRun(session, run, undefined, progressBefore);
+
+  return {
+    run,
+    review,
+    directionCorrect: review?.directionCorrect ?? false,
+    confidence: session.state.confidence
+  };
+}
+
+/**
+ * 外层 ToT 循环：方向错 / 未完成 / 置信度不足时再次 runTotTurn。
+ * llmReplan 在连续无进展或假设被清空时由外部触发。
+ */
+export async function runTotTurnWithRetries(
+  session: AgentSession,
+  agent: ReActAgent,
+  maxRetries = MAX_TOT_RETRIES
+): Promise<TotTurnResult> {
+  let last: TotTurnResult | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
     session.throwIfAborted();
 
-    if (session.state.noProgress >= 2) {
-      await llmReplan(session);
-      session.state.noProgress = 0;
-    } else if (isEmpty(session.state.hypotheses)) {
-      await llmPlan(session);
+    if (attempt > 1) {
+      if (session.state.noProgress >= 2) {
+        await llmReplan(session);
+        session.state.noProgress = 0;
+      } else if (isEmpty(session.state.hypotheses)) {
+        await llmPlan(session);
+      }
     }
 
-    const progressBefore = session.snapshotProgress();
+    last = await runTotTurn(session, agent);
 
-    let result;
-    try {
-      result = await agent.run();
-    } catch (error) {
-      await updateStateFromRun(
-        session,
-        {completed: false, steps: 0, reason: 'max_steps'},
-        error,
-        progressBefore
-      );
-      throw error;
-    }
-
-    await updateStateFromRun(session, result, undefined, progressBefore);
-
-    if (result.completed || session.state.confidence >= 0.9) {
-      return;
+    if (!shouldContinueTot(last)) {
+      return last;
     }
   }
+
+  session.events.say(
+    'system',
+    `ToT 已达最大轮数（${maxRetries}），方向或置信度仍未达标，按当前结论继续。`
+  );
+
+  return last!;
 }

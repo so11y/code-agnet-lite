@@ -1,9 +1,9 @@
-import {discoverRules, formatRuleForPrompt, selectMatchingRules, type AgentRule} from '@code-agent-lite/tools';
+import {discoverRules, selectMatchingRules, type AgentRule} from '@code-agent-lite/tools';
 import type {AgentSession} from '../session.js';
 
 export async function applyTurnRules(session: AgentSession, input: string, cwd: string): Promise<AgentRule[]> {
   const rules = await discoverRules(cwd);
-  const matched = selectMatchingRules(rules, input, session.state);
+  const matched = selectMatchingRules(rules, input, session.ruleContextState());
   const injected: AgentRule[] = [];
 
   for (const rule of matched) {

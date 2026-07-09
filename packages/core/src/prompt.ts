@@ -101,6 +101,15 @@ export function buildWrapUpPrompt(remaining: number): string {
   return `注意：本轮还剩 ${remaining} 步就达到最大循环次数。请尽快收尾：优先完成当前核心任务，停止不必要的探索，直接给出结论或最终修改。`;
 }
 
+import type {AgentMessage} from './session-types.js';
+
+export function createWorkspaceSystemMessages(cwd: string, leadingPrompt = SYSTEM_PROMPT): AgentMessage[] {
+  return [
+    {role: 'system', content: leadingPrompt},
+    {role: 'system', content: formatWorkspaceContext(cwd)}
+  ];
+}
+
 export function formatWorkspaceContext(cwd: string): string {
   return `当前工作区：${cwd}`;
 }

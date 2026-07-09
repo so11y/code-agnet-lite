@@ -19,10 +19,17 @@ export class DefaultCodeAgent extends ReActAgent {
   }
 }
 
+/** 任意 Agent 后端：至少能执行一轮 run */
 export type CodeAgent = {
   run(): Promise<AgentRunResult>;
 };
 
-export function isReActAgent(agent: CodeAgent): agent is ReActAgent {
+/** 可在本地 session 内跑 OpenAI ReAct tool loop 的 Agent */
+export type ToolLoopAgent = ReActAgent;
+
+export function supportsToolLoop(agent: CodeAgent): agent is ToolLoopAgent {
   return agent instanceof ReActAgent && !(agent instanceof CursorCodeAgent);
 }
+
+/** @deprecated 使用 supportsToolLoop */
+export const isReActAgent = supportsToolLoop;

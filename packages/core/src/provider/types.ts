@@ -12,7 +12,7 @@ export type ProviderLlmStreamOptions = LlmStreamOptions;
 
 /** OpenAI 兼容的 chat 后端，供 router / planner / ReAct 使用 */
 export interface LlmProvider {
-  readonly kind: 'openai';
+  readonly kind: Extract<AgentProviderKind, 'openai'>;
   streamWithTools(
     messages: AgentMessage[],
     options: ProviderLlmStreamOptions
@@ -28,9 +28,11 @@ export type CursorAgentHandle = {
 
 export type {CursorSdkTokenUsage} from './token-usage.js';
 
+export type CursorRunStatus = 'completed' | 'error' | (string & {});
+
 export type CursorRunHandle = {
   stream(): AsyncIterable<unknown>;
-  wait(): Promise<{status: string; result?: string; id?: string; usage?: CursorSdkTokenUsage}>;
+  wait(): Promise<{status: CursorRunStatus; result?: string; id?: string; usage?: CursorSdkTokenUsage}>;
 };
 
 export type {AgentMessage, LlmOptions, LlmStreamOptions, TokenUsageSink};
