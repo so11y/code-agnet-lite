@@ -98,7 +98,7 @@ export async function runCursorAgentTurn(
   }
 
   session.beginTurn(input);
-  session.appendUser(input);
+  session.appendUser(input, {emit: false});
   session.status('thinking', 'Cursor Agent');
 
   let agent = session.cursorAgent;

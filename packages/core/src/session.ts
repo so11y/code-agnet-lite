@@ -85,9 +85,11 @@ export class AgentSession {
     this.turnOps = {writtenFiles: [], deletedFiles: [], executedCommands: []};
   }
 
-  appendUser(content: string) {
+  appendUser(content: string, options?: {emit?: boolean}) {
     this.messages.push({role: 'user', content});
-    this.say('user', content);
+    if (options?.emit !== false) {
+      this.say('user', content);
+    }
   }
 
   flushStateDelta() {
@@ -216,6 +218,18 @@ export class AgentSession {
 
   appendAssistantDelta(delta: string) {
     this.options.onEvent({type: 'message_delta', delta});
+  }
+
+  startThinkingStream() {
+    this.options.onEvent({type: 'thinking_start'});
+  }
+
+  appendThinkingDelta(delta: string) {
+    this.options.onEvent({type: 'thinking_delta', delta});
+  }
+
+  endThinkingStream() {
+    this.options.onEvent({type: 'thinking_end'});
   }
 
   commitAssistant(message: ChatCompletionAssistantMessageParam, streamed: boolean) {

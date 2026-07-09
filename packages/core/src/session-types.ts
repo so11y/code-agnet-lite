@@ -14,7 +14,7 @@ export type DagTaskOutput = {
 
 export type AgentStatus = 'idle' | 'thinking' | 'running_tool' | 'done' | 'error';
 
-export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
+export type ChatRole = 'user' | 'assistant' | 'system' | 'tool' | 'thinking';
 
 export type ChatItem = {
   role: ChatRole;
@@ -50,6 +50,7 @@ export type LlmOptions = {
 
 export type LlmStreamOptions = LlmOptions & {
   onDelta: (delta: string) => void;
+  onReasoningDelta?: (delta: string) => void;
 };
 
 export type AgentEvent =
@@ -58,6 +59,9 @@ export type AgentEvent =
   | {type: 'message_start'; role: ChatRole}
   | {type: 'message_delta'; delta: string}
   | {type: 'message_end'}
+  | {type: 'thinking_start'}
+  | {type: 'thinking_delta'; delta: string}
+  | {type: 'thinking_end'}
   | {type: 'workspace'; cwd: string}
   | {type: 'tool_start'; call: ToolCallItem}
   | {type: 'tool_end'; id: string; output?: string; error?: string}

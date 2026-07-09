@@ -9,15 +9,15 @@ import {runCursorAgentTurn} from './provider/index.js';
 import {ReActAgent} from './react-agent.js';
 import {routeReasoningMode} from './router.js';
 import {AgentSession} from './session.js';
-import type {AgentMessage} from './session-types.js';
+import type {AgentMessage, LlmStreamOptions} from './session-types.js';
 import {judgeShouldVerify, runVerifyAndFixLoop} from './verify.js';
 
 class CodeAgent extends ReActAgent {
   protected async streamLlm(
     messages: AgentMessage[],
-    onDelta: (delta: string) => void
+    options: LlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam> {
-    return callLlmStream(messages, this.session.streamOptions(onDelta));
+    return callLlmStream(messages, options);
   }
 
   protected findTool(name: string) {
@@ -74,13 +74,14 @@ export async function runAgentTurn(
   }
 
   session.beginTurn(input);
-  session.appendUser(input);
+  session.appendUser(input, {emit: false});
 
   const agent = new CodeAgent(session.options, session);
 
   session.status('thinking', '路由判断');
   const route = await routeReasoningMode(input, session);
   session.reasoningMode = route.mode;
+  session.say('system', `路由 → ${route.mode}：${route.reason}`);
 
   switch (route.mode) {
     case 'react':

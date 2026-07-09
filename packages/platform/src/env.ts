@@ -64,6 +64,11 @@ export function getOpenAiModel(defaultModel?: string): string {
   return process.env.OPENAI_MODEL?.trim() || defaultModel || '';
 }
 
+export function isThinkingEnabled(): boolean {
+  const value = process.env.ENABLE_THINKING?.trim().toLowerCase();
+  return value !== 'false' && value !== '0';
+}
+
 export type AgentProviderKind = 'openai' | 'cursor';
 
 export function getAgentProviderKind(): AgentProviderKind {

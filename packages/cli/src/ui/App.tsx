@@ -1,6 +1,6 @@
 import path from 'node:path';
 import {readFile} from 'node:fs/promises';
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
 import {createTokenUsage, type AgentEvent, type AgentStatus, type ChatItem, type TokenUsage} from '@code-agent-lite/core';
 import {getAgentProviderKind} from '@code-agent-lite/platform';
@@ -14,9 +14,8 @@ import {
 import {ChatPanel} from './ChatPanel.js';
 import {InputBox} from './InputBox.js';
 import {StatusBar} from './StatusBar.js';
-import {planFromGraph} from './plan-todo.js';
+import {planFromGraph, type PlanTodoState} from './plan-todo.js';
 import {isInternalSystemMessage, type TranscriptItem} from './transcript.js';
-import type {PlanTodoState} from './plan-todo.js';
 import {useAgentSession} from './useAgentSession.js';
 
 type Props = {
@@ -60,6 +59,27 @@ export function App({cwd}: Props) {
     });
   }, []);
 
+  const updateStreamingThinking = useCallback((update: (item: ChatItem) => ChatItem) => {
+    setItems((current) => {
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        const entry = current[index];
+        if (
+          entry.type === 'message' &&
+          entry.item.role === 'thinking' &&
+          entry.item.streaming
+        ) {
+          return [
+            ...current.slice(0, index),
+            {type: 'message', item: update(entry.item)},
+            ...current.slice(index + 1)
+          ];
+        }
+      }
+
+      return current;
+    });
+  }, []);
+
   const updateStatus = useCallback((next: AgentStatus, message?: string) => {
     setStatus(next);
     setStatusMessage(message);
@@ -85,6 +105,18 @@ export function App({cwd}: Props) {
           break;
         case 'message_end':
           updateStreamingAssistant((item) => ({...item, streaming: false}));
+          break;
+        case 'thinking_start':
+          appendMessage({role: 'thinking', content: '', streaming: true});
+          break;
+        case 'thinking_delta':
+          updateStreamingThinking((item) => ({
+            ...item,
+            content: `${item.content}${event.delta}`
+          }));
+          break;
+        case 'thinking_end':
+          updateStreamingThinking((item) => ({...item, streaming: false}));
           break;
         case 'workspace':
           setWorkspace(event.cwd);
@@ -118,7 +150,7 @@ export function App({cwd}: Props) {
           break;
       }
     },
-    [appendMessage, updateStatus, updateStreamingAssistant]
+    [appendMessage, updateStatus, updateStreamingAssistant, updateStreamingThinking]
   );
 
   const {clearSession, runTurn} = useAgentSession({onEvent});
@@ -171,18 +203,31 @@ export function App({cwd}: Props) {
   );
 
   const busy = status === 'thinking' || status === 'running_tool';
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   const provider = getAgentProviderKind();
 
   const submit = useCallback(
     (input: string) => {
-      if (busy) {
+      if (busyRef.current) {
         return;
+      }
+
+      const displayInput = input.trim();
+      if (!displayInput) {
+        return;
+      }
+
+      const isNewSession = parseNewSessionCommand(displayInput);
+      const workspaceTarget = parseWorkspaceCommand(displayInput);
+      if (!isNewSession && !workspaceTarget) {
+        appendMessage({role: 'user', content: displayInput});
       }
 
       void (async () => {
         let resolvedInput = input;
 
-        const fileRef = /^@(.+)$/.exec(input.trim());
+        const fileRef = /^@(.+)$/.exec(displayInput);
         if (fileRef) {
           try {
             const filePath = path.resolve(workspace, fileRef[1].trim());
@@ -196,14 +241,13 @@ export function App({cwd}: Props) {
           }
         }
 
-        if (parseNewSessionCommand(resolvedInput)) {
+        if (isNewSession) {
           resetSession(workspace);
           return;
         }
 
-        const nextWorkspace = parseWorkspaceCommand(resolvedInput);
-        if (nextWorkspace) {
-          await switchWorkspace(resolvedInput, nextWorkspace);
+        if (workspaceTarget) {
+          await switchWorkspace(resolvedInput, workspaceTarget);
           return;
         }
 
@@ -220,7 +264,6 @@ export function App({cwd}: Props) {
         if (!resolved) {
           const message = `工作区路径不存在或不是目录：${paths[0]}`;
           updateStatus('error', message);
-          appendMessage({role: 'user', content: resolvedInput});
           appendMessage({role: 'system', content: message});
           return;
         }
@@ -230,11 +273,10 @@ export function App({cwd}: Props) {
           appendMessage({role: 'system', content: `工作区：${resolved}`});
         }
 
-        appendMessage({role: 'user', content: resolvedInput});
         runInWorkspace(resolvedInput, resolved);
       })();
     },
-    [appendMessage, busy, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
+    [appendMessage, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
   );
 
   return (

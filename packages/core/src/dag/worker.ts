@@ -4,7 +4,7 @@ import {callLlmStream} from '../llm.js';
 import {ReActAgent} from '../react-agent.js';
 import {SYSTEM_PROMPT} from '../prompt.js';
 import {AgentSession, createAgentSession} from '../session.js';
-import type {AgentEvent, AgentMessage, AgentSessionOptions} from '../session-types.js';
+import type {AgentEvent, AgentMessage, AgentSessionOptions, LlmStreamOptions} from '../session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';
 import type {Blackboard, TaskNode} from './types.js';
 import {createTaskOutput, type TaskOutput} from './types.js';
@@ -34,9 +34,9 @@ class WorkerCodeAgent extends ReActAgent {
 
   protected async streamLlm(
     messages: AgentMessage[],
-    onDelta: (delta: string) => void
+    options: LlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam> {
-    return callLlmStream(messages, this.session.streamOptions(onDelta));
+    return callLlmStream(messages, options);
   }
 
   protected findTool(name: string): AgentTool | undefined {

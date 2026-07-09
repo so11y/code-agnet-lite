@@ -2,7 +2,7 @@ import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall}
 import {parseToolArgs} from './openai-message.js';
 import {truncate, withTimeout} from '@code-agent-lite/shared';
 import {AgentSession} from './session.js';
-import type {AgentMessage, AgentOptions, ToolCallItem} from './session-types.js';
+import type {AgentMessage, AgentOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';
 
 export type AgentRunResult = {
@@ -33,14 +33,37 @@ export abstract class ReActAgent {
       this.session.status('thinking', `${step}/${this.maxSteps}`);
 
       let streamed = false;
-      const message = await this.streamLlm(this.buildLlmMessages(), (delta) => {
-        if (!streamed) {
-          this.session.startAssistantStream();
-          streamed = true;
-        }
+      let streamedThinking = false;
 
-        this.session.appendAssistantDelta(delta);
+      const message = await this.streamLlm(this.buildLlmMessages(), {
+        session: this.session,
+        onReasoningDelta: (delta) => {
+          if (!streamedThinking) {
+            this.session.startThinkingStream();
+            streamedThinking = true;
+          }
+
+          this.session.appendThinkingDelta(delta);
+        },
+        onDelta: (delta) => {
+          if (!streamed) {
+            if (streamedThinking) {
+              this.session.endThinkingStream();
+              streamedThinking = false;
+            }
+
+            this.session.startAssistantStream();
+            streamed = true;
+          }
+
+          this.session.appendAssistantDelta(delta);
+        }
       });
+
+      if (streamedThinking) {
+        this.session.endThinkingStream();
+      }
+
       this.session.commitAssistant(message, streamed);
 
       if (!message.tool_calls?.length) {
@@ -57,7 +80,7 @@ export abstract class ReActAgent {
 
   protected abstract streamLlm(
     messages: AgentMessage[],
-    onDelta: (delta: string) => void
+    options: LlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam>;
 
   protected abstract findTool(name: string): AgentTool | undefined;

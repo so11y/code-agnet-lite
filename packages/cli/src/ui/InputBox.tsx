@@ -15,7 +15,23 @@ function normalizePastedText(raw: string): string {
 
 export function InputBox({disabled, onSubmit}: Props) {
   const [value, setValue] = useState('');
+  const valueRef = useRef('');
   const lastInputAtRef = useRef(0);
+
+  const setInput = (next: string) => {
+    valueRef.current = next;
+    setValue(next);
+  };
+
+  const submitInput = () => {
+    const trimmed = valueRef.current.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setInput('');
+    onSubmit(trimmed);
+  };
 
   useInput((input, key) => {
     if (disabled) {
@@ -23,7 +39,7 @@ export function InputBox({disabled, onSubmit}: Props) {
     }
 
     if (key.backspace || key.delete) {
-      setValue((current) => current.slice(0, -1));
+      setInput(valueRef.current.slice(0, -1));
       return;
     }
 
@@ -31,25 +47,23 @@ export function InputBox({disabled, onSubmit}: Props) {
       return;
     }
 
-    if (input) {
-      lastInputAtRef.current = Date.now();
-      const normalized = normalizePastedText(input);
-      setValue((current) => `${current}${normalized}`);
-    }
+    const isEnter = key.return || (Boolean(input) && /^[\r\n]+$/.test(input));
 
-    if (key.return) {
+    if (isEnter) {
       const pastedLineBreak = Date.now() - lastInputAtRef.current < PASTE_ENTER_MS;
 
       if (pastedLineBreak) {
-        setValue((current) => `${current}\n`);
+        setInput(`${valueRef.current}\n`);
         return;
       }
 
-      const trimmed = value.trim();
-      if (trimmed) {
-        onSubmit(trimmed);
-        setValue('');
-      }
+      submitInput();
+      return;
+    }
+
+    if (input) {
+      lastInputAtRef.current = Date.now();
+      setInput(`${valueRef.current}${normalizePastedText(input)}`);
     }
   });
 

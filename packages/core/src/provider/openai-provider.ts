@@ -5,12 +5,17 @@ import {tools} from '@code-agent-lite/tools';
 import {
   getOpenAiBaseUrl,
   getOpenAiModel,
-  getRequiredOpenAiApiKey
+  getRequiredOpenAiApiKey,
+  isThinkingEnabled
 } from '@code-agent-lite/platform';
-import type {AgentMessage, TokenUsage} from '../session-types.js';
+import type {AgentMessage, ChatRole, TokenUsage} from '../session-types.js';
 import type {LlmCallOptions, LlmProvider, ProviderLlmStreamOptions} from './types.js';
 
 const DEFAULT_MODEL = '';
+
+type ReasoningMessage = {
+  reasoning_content?: string | null;
+};
 
 function normalizeUsage(usage?: {
   prompt_tokens?: number;
@@ -37,6 +42,25 @@ function recordUsage(options: LlmCallOptions | undefined, usage?: TokenUsage) {
   }
 }
 
+function thinkingExtraBody(): {enable_thinking: boolean} | undefined {
+  return isThinkingEnabled() ? {enable_thinking: true} : undefined;
+}
+
+function readReasoningContent(message: unknown): string | undefined {
+  const reasoning = (message as ReasoningMessage | undefined)?.reasoning_content;
+  return typeof reasoning === 'string' && reasoning.trim() ? reasoning : undefined;
+}
+
+function emitPlainReasoning(options: LlmCallOptions | undefined, message: unknown) {
+  const reasoning = readReasoningContent(message);
+  if (!reasoning || !options?.session) {
+    return;
+  }
+
+  const session = options.session as {say?(role: ChatRole, content: string): void};
+  session.say?.('thinking', reasoning);
+}
+
 let sharedClient: OpenAI | undefined;
 
 function createClient() {
@@ -54,9 +78,12 @@ export class OpenAiLlmProvider implements LlmProvider {
   readonly kind = 'openai' as const;
 
   private createChatCompletion(messages: AgentMessage[], withTools: boolean) {
+    const thinking = thinkingExtraBody();
+
     return createClient().chat.completions.create({
       model: getOpenAiModel(DEFAULT_MODEL),
       messages,
+      ...(thinking ? {extra_body: thinking} : {}),
       ...(withTools
         ? {
             tools: tools.map((tool) => tool.openaiTool),
@@ -69,12 +96,14 @@ export class OpenAiLlmProvider implements LlmProvider {
   async chatWithTools(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
     const response = await this.createChatCompletion(messages, true);
     recordUsage(options, normalizeUsage(response.usage));
+    emitPlainReasoning(options, response.choices[0]?.message);
     return response;
   }
 
   async plainChat(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
     const response = await this.createChatCompletion(messages, false);
     recordUsage(options, normalizeUsage(response.usage));
+    emitPlainReasoning(options, response.choices[0]?.message);
     return response;
   }
 
@@ -82,16 +111,20 @@ export class OpenAiLlmProvider implements LlmProvider {
     messages: AgentMessage[],
     options: ProviderLlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam> {
+    const thinking = thinkingExtraBody();
+
     const stream = await createClient().chat.completions.create({
       model: getOpenAiModel(DEFAULT_MODEL),
       messages,
       stream: true,
       stream_options: {include_usage: true},
+      ...(thinking ? {extra_body: thinking} : {}),
       tools: tools.map((tool) => tool.openaiTool),
       tool_choice: 'auto'
     });
 
     let content = '';
+    let reasoning = '';
     let usage: TokenUsage | undefined;
     const toolCallsByIndex = new Map<
       number,
@@ -106,6 +139,12 @@ export class OpenAiLlmProvider implements LlmProvider {
       const delta = chunk.choices[0]?.delta;
       if (!delta) {
         continue;
+      }
+
+      const reasoningDelta = readReasoningContent(delta);
+      if (reasoningDelta) {
+        reasoning += reasoningDelta;
+        options.onReasoningDelta?.(reasoningDelta);
       }
 
       if (delta.content) {
@@ -154,6 +193,7 @@ export class OpenAiLlmProvider implements LlmProvider {
     return {
       role: 'assistant',
       content: content || null,
+      ...(reasoning ? {reasoning_content: reasoning} : {}),
       ...(toolCalls.length ? {tool_calls: toolCalls} : {})
     };
   }

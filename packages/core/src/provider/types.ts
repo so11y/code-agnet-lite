@@ -10,6 +10,7 @@ export type LlmCallOptions = {
 
 export type ProviderLlmStreamOptions = LlmCallOptions & {
   onDelta: (delta: string) => void;
+  onReasoningDelta?: (delta: string) => void;
 };
 
 /** OpenAI 兼容的 chat 后端，供 router / planner / ReAct 使用 */
