@@ -8,7 +8,7 @@ export function createEmptyTurnOperations(): TurnOperations {
   return {writtenFiles: [], deletedFiles: [], executedCommands: []};
 }
 
-export type TurnContext = {
+export type TurnSummary = {
   userInput: string;
   operations: TurnOperations;
   assistantText: string;
@@ -19,6 +19,6 @@ export type VerifyGate = {
   reason: string;
 };
 
-export type TurnReview = TurnContext & {
+export type TurnReview = TurnSummary & {
   gate: VerifyGate;
 };

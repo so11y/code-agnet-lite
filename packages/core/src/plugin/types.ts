@@ -7,7 +7,7 @@ export type ExecuteResult = {
   done: boolean;
 };
 
-export type TurnContext = {
+export type PluginTurnContext = {
   session: AgentSession;
   cwd: string;
   input: string;
@@ -20,14 +20,14 @@ export type AgentPlugin = {
   name: string;
   enforce?: 'pre' | 'post';
 
-  buildStart?(ctx: TurnContext): void | Promise<void>;
-  transformInput?(input: string, ctx: TurnContext): string | void | Promise<string | void>;
-  resolveMode?(input: string, ctx: TurnContext): ReasoningRoute | null | void | Promise<ReasoningRoute | null | void>;
-  prepareAgent?(ctx: TurnContext): void | Promise<void>;
-  execute?(ctx: TurnContext): ExecuteResult | void | Promise<ExecuteResult | void>;
-  closeTurn?(ctx: TurnContext): void | Promise<void>;
+  buildStart?(ctx: PluginTurnContext): void | Promise<void>;
+  transformInput?(input: string, ctx: PluginTurnContext): string | void | Promise<string | void>;
+  resolveMode?(input: string, ctx: PluginTurnContext): ReasoningRoute | null | void | Promise<ReasoningRoute | null | void>;
+  prepareAgent?(ctx: PluginTurnContext): void | Promise<void>;
+  execute?(ctx: PluginTurnContext): ExecuteResult | void | Promise<ExecuteResult | void>;
+  closeTurn?(ctx: PluginTurnContext): void | Promise<void>;
 };
 
-export function createTurnContext(session: AgentSession, input: string, cwd: string): TurnContext {
+export function createPluginTurnContext(session: AgentSession, input: string, cwd: string): PluginTurnContext {
   return {session, cwd, input, meta: new Map()};
 }

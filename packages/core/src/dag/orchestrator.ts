@@ -22,13 +22,13 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
     const skipped = [...graph.nodes.values()].filter((node) => node.status === 'skipped');
 
     if (mergeNode?.status === 'done' && mergeNode.output?.summary) {
-      session.status('done', 'DAG 完成');
+      session.events.status('done', 'DAG 完成');
       return;
     }
 
     if (failed.length > 0 || skipped.length > 0) {
-      session.status('error', 'DAG 未完整完成');
-      session.say(
+      session.events.status('error', 'DAG 未完整完成');
+      session.events.say(
         'system',
         joinSections(
           failed.length > 0
@@ -40,11 +40,11 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
       return;
     }
 
-    session.status('error', 'DAG 未完成 merge 节点');
+    session.events.status('error', 'DAG 未完成 merge 节点');
   } catch (error) {
     const message = formatError(error);
-    session.status('error', message);
-    session.say('assistant', message);
+    session.events.status('error', message);
+    session.events.say('assistant', message);
     throw error;
   }
 }

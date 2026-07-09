@@ -12,7 +12,7 @@ import {discoverVerifyCommands} from './verify-discovery.js';
 import {
   buildFinalFailureReport,
   fallbackVerifyGate,
-  formatTurnContextForGate,
+  formatTurnSummaryForGate,
   formatVerifyFailure
 } from './verify-report.js';
 import {runAllVerify} from './verify-runner.js';
@@ -70,27 +70,27 @@ export class VerifyCoordinator {
   }
 
   static async judgeGate(session: AgentSession): Promise<TurnReview> {
-    const context = session.collectTurnContext();
-    session.status('thinking', '验证门禁');
+    const summary = session.collectTurnSummary();
+    session.events.status('thinking', '验证门禁');
 
     const gate = await StructuredLlmCaller.call({
       messages: [
         {role: 'system', content: VERIFY_GATE_PROMPT},
-        {role: 'user', content: formatTurnContextForGate(context)}
+        {role: 'user', content: formatTurnSummaryForGate(summary)}
       ],
       schema: verifyGateSchema,
       llmOptions: session.llmOptions(),
-      fallback: fallbackVerifyGate(context)
+      fallback: fallbackVerifyGate(summary)
     });
 
-    return {...context, gate};
+    return {...summary, gate};
   }
 
   async runFixLoop(agent: ReActAgent, session: AgentSession, review: TurnReview): Promise<void> {
     const commands = await this.discover();
 
     if (commands.length === 0) {
-      session.say(
+      session.events.say(
         'system',
         [
           '## 无法自动验证',
@@ -101,7 +101,7 @@ export class VerifyCoordinator {
           '已跳过自动验证，请手动确认改动是否正确。'
         ].join('\n')
       );
-      session.status('done', '完成（无可用验证命令）');
+      session.events.status('done', '完成（无可用验证命令）');
       return;
     }
 
@@ -110,11 +110,11 @@ export class VerifyCoordinator {
 
     while (true) {
       session.throwIfAborted();
-      session.status('thinking', '自动验证');
+      session.events.status('thinking', '自动验证');
       const failures = await this.runAll(commands);
 
       if (failures.length === 0) {
-        session.status('done', '验证通过');
+        session.events.status('done', '验证通过');
         return;
       }
 
@@ -133,8 +133,8 @@ export class VerifyCoordinator {
           operations: session.refreshOperations(),
           gate: review.gate
         });
-        session.status('error', '验证未通过，已达最大尝试次数');
-        session.say('system', report);
+        session.events.status('error', '验证未通过，已达最大尝试次数');
+        session.events.say('system', report);
         return;
       }
 

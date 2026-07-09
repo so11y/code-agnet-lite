@@ -5,6 +5,7 @@ import {messageText} from '../openai-message.js';
 import {SYSTEM_PROMPT, formatWorkspaceContext} from '../prompt.js';
 import type {AgentMessage, ChatRole} from '../session-types.js';
 import type {SessionEventBus} from './event-bus.js';
+import type {FinishToolOptions} from './finish-tool-options.js';
 
 const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMessage => ({
   role: 'assistant',
@@ -59,13 +60,13 @@ export class ConversationStore {
     }
   }
 
-  finishTool(id: string, content: string, error?: string) {
+  finishTool(id: string, content: string, options?: FinishToolOptions) {
     this.messages.push({role: 'tool', tool_call_id: id, content});
-    this.events.finishTool(id, content, error);
+    this.events.finishTool(id, content, options);
   }
 
   injectRule(rule: AgentRule) {
-    this.addSystemNote(formatRuleForPrompt(rule), {emit: true});
+    this.addSystemNote(formatRuleForPrompt(rule), {emit: false});
   }
 
   setSkillCatalog(content: string, cwd: string) {

@@ -15,13 +15,10 @@ export {routeReasoningMode, type ReasoningRoute} from './router.js';
 export {VerifyCoordinator, judgeShouldVerify, runVerifyAndFixLoop, decideFixLoopAction, type VerifyResult, type FixLoopAction} from './verify/index.js';
 export {StructuredLlmCaller} from './structured-llm-caller.js';
 export {StateDeltaProjector} from './state-delta-projector.js';
-export {TurnOrchestrator} from './turn/turn-orchestrator.js';
 export {
   PluginDriver,
-  cursorPlugin,
   dagPlugin,
   defaultPlugins,
-  openaiPlugin,
   reactPlugin,
   routerPlugin,
   skillPlugin,
@@ -29,7 +26,7 @@ export {
   verifyPlugin,
   type AgentPlugin,
   type ExecuteResult,
-  type TurnContext
+  type PluginTurnContext
 } from './plugin/index.js';
 export {
   createBlackboard,
@@ -47,13 +44,9 @@ export {
 export {runDagTurn} from './dag/orchestrator.js';
 export {topologicalSortIds} from './dag/graph-utils.js';
 export {
-  CursorAgentProvider,
-  ProviderRegistry,
-  disposeAgentSession,
-  getAgentAi,
-  getLlmProvider,
-  resetProvidersForTests,
-  resolveAgentProviderKind,
-  type AgentAi,
+  AgentProviderRegistry,
+  agentProviders,
+  openAiLlm,
+  type AgentProvider,
   type AgentProviderKind
 } from './provider/index.js';

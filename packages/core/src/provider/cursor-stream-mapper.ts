@@ -1,5 +1,6 @@
 import {truncate} from '@code-agent-lite/shared';
 import type {TokenUsage, ToolCallItem} from '../session-types.js';
+import type {FinishToolOptions} from '../session/finish-tool-options.js';
 import {normalizeCursorUsage} from './token-usage.js';
 import type {CursorSdkTokenUsage} from './types.js';
 
@@ -20,7 +21,7 @@ export type CursorSdkMessage = {
 
 export type CursorStreamMapperSink = {
   startTool(call: ToolCallItem): void;
-  finishTool(id: string, output: string, error?: string): void;
+  finishTool(id: string, output: string, options?: FinishToolOptions): void;
   appendAssistantDelta(text: string): void;
   recordTokenUsage(usage: TokenUsage): void;
 };
@@ -66,7 +67,7 @@ export function extractCursorText(message: CursorSdkMessage): string {
 function mapToolCallEvent(
   sink: CursorStreamMapperSink,
   event: CursorSdkMessage,
-  openTools: Set<string>
+  openTools: Map<string, ToolCallItem>
 ) {
   const id = event.call_id;
   const name = event.name;
@@ -80,28 +81,34 @@ function mapToolCallEvent(
       return;
     }
 
-    openTools.add(id);
-    sink.startTool({id, name, input: event.args ?? {}});
+    const call: ToolCallItem = {id, name, input: event.args ?? {}};
+    openTools.set(id, call);
+    sink.startTool(call);
     return;
   }
 
   if (event.status === 'completed' || event.status === 'error') {
+    const call = openTools.get(id);
     openTools.delete(id);
     const output = formatCursorToolOutput(event.result);
+    const toolOptions: FinishToolOptions = {
+      toolName: call?.name,
+      toolInput: call?.input
+    };
 
     if (event.status === 'error') {
-      sink.finishTool(id, output, output || '工具执行失败');
+      sink.finishTool(id, output, {...toolOptions, error: output || '工具执行失败'});
       return;
     }
 
-    sink.finishTool(id, output);
+    sink.finishTool(id, output, toolOptions);
   }
 }
 
 export function mapCursorStreamEvent(
   event: CursorSdkMessage,
   sink: CursorStreamMapperSink,
-  openTools: Set<string>
+  openTools: Map<string, ToolCallItem>
 ): CursorStreamEventResult {
   if (event.type === 'usage' && event.usage) {
     sink.recordTokenUsage(normalizeCursorUsage(event.usage));

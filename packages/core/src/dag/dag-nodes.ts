@@ -31,7 +31,7 @@ export async function runMergeNode(
     '请生成用户可见的最终回答，简洁说明完成了什么、关键结论与后续建议。'
   ].join('\n');
 
-  session.status('thinking', 'Merge Agent');
+  session.events.status('thinking', 'Merge Agent');
 
   const response = await callPlainLlm(
     [
@@ -42,7 +42,7 @@ export async function runMergeNode(
   );
 
   const summary = extractAssistantText(response) || '任务已完成。';
-  session.say('assistant', summary);
+  session.events.say('assistant', summary);
 
   return createTaskOutput({
     summary,

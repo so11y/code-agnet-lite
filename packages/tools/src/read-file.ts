@@ -1,6 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {z} from 'zod';
-import {resolveInsideCwd, truncate} from '@code-agent-lite/shared';
+import {limitDisplayLines, resolveInsideCwd, truncate} from '@code-agent-lite/shared';
 import {createTool} from './common.js';
 
 export const readFileTool = createTool({
@@ -12,6 +12,10 @@ export const readFileTool = createTool({
   async execute(input, context) {
     const filePath = resolveInsideCwd(context.cwd, input.path);
     const content = await readFile(filePath, 'utf8');
-    return truncate(content);
+
+    return {
+      output: truncate(content),
+      display: {kind: 'code', path: input.path, content: limitDisplayLines(content)}
+    };
   }
 });

@@ -1,5 +1,5 @@
 import {getContextLimit} from '@code-agent-lite/platform';
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
+import {inferToolDisplay} from '@code-agent-lite/shared';
 import type {
   AgentEvent,
   AgentStatus,
@@ -8,6 +8,7 @@ import type {
   ToolCallItem
 } from '../session-types.js';
 import {createTokenUsage} from '../session-types.js';
+import type {FinishToolOptions} from './finish-tool-options.js';
 
 export class SessionEventBus {
   readonly tokenUsage: TokenUsage = createTokenUsage();
@@ -77,8 +78,23 @@ export class SessionEventBus {
     this.onEvent({type: 'tool_start', call});
   }
 
-  finishTool(id: string, content: string, error?: string) {
-    this.onEvent(error ? {type: 'tool_end', id, error} : {type: 'tool_end', id, output: content});
+  finishTool(id: string, content: string, options?: FinishToolOptions) {
+    const display =
+      options?.display ??
+      (options?.toolName ? inferToolDisplay(options.toolName, content, options.toolInput) : undefined);
+    const error = options?.error;
+
+    if (error) {
+      this.onEvent({
+        type: 'tool_end',
+        id,
+        error,
+        display: display ?? {kind: 'text', content: error}
+      });
+      return;
+    }
+
+    this.onEvent({type: 'tool_end', id, output: content, display});
   }
 
   setWorkspace(cwd: string) {

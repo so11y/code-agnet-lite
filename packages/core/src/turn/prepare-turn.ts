@@ -11,13 +11,13 @@ export async function prepareTurn(session: AgentSession, input: string, cwd: str
   const injectedRules = await applyTurnRules(session, cleanedInput, cwd);
 
   if (missingSkill) {
-    session.say('system', session.skillRegistry.formatNotFound(missingSkill));
+    session.events.say('system', session.skillRegistry.formatNotFound(missingSkill));
   } else if (loaded.length) {
-    session.say('system', `已加载 Skill：${loaded.map((skill) => skill.name).join(', ')}`);
+    session.events.say('system', `已加载 Skill：${loaded.map((skill) => skill.name).join(', ')}`);
   }
 
   if (injectedRules.length) {
-    session.say('system', `已匹配 Rule：${injectedRules.map((rule) => rule.id).join(', ')}`);
+    session.events.say('system', `已匹配 Rule：${injectedRules.map((rule) => rule.id).join(', ')}`);
   }
 
   session.beginTurn(cleanedInput);

@@ -37,6 +37,8 @@ export const grepTool = createTool({
       return formatCommandOutput(result, '搜索超时。');
     }
 
-    return truncate(result.stdout ?? '');
+    const output = truncate(result.stdout ?? '');
+
+    return {output};
   }
 });

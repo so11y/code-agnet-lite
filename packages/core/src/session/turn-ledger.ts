@@ -1,6 +1,6 @@
 import {pickField} from '@code-agent-lite/shared';
 import {compact, union} from 'lodash-es';
-import type {InternalState, TurnContext, TurnOperations} from '../session-types.js';
+import type {InternalState, TurnOperations, TurnSummary} from '../session-types.js';
 import {createInternalState} from '../session-types.js';
 import {createEmptyTurnOperations} from '../types/operations.js';
 type StateListKey = 'visitedFiles' | 'searchedTerms' | 'writtenFiles' | 'deletedFiles' | 'executedCommands';
@@ -67,7 +67,7 @@ export class TurnLedger {
     };
   }
 
-  collectTurnContext(assistantText: string): TurnContext {
+  collectTurnSummary(assistantText: string): TurnSummary {
     return {
       userInput: this.turnUserInput,
       operations: this.refreshOperations(),

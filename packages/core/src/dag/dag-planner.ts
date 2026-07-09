@@ -10,7 +10,7 @@ import type {TaskGraph} from './types.js';
 const DAG_JSON_SCHEMA = formatSchemaForPrompt(dagPlanSchema);
 
 export async function llmPlanDag(input: string, session: AgentSession): Promise<TaskGraph> {
-  session.status('thinking', 'DAG 规划');
+  session.events.status('thinking', 'DAG 规划');
 
   const plan = await StructuredLlmCaller.callOrThrow({
     messages: [

@@ -1,6 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
-import Spinner from 'ink-spinner';
+import {Spinner} from './Spinner.js';
 import {compactText} from '@code-agent-lite/shared';
 import {
   countFinished,
@@ -23,7 +23,7 @@ function PlanTodoRow({item}: {item: PlanTodoItem}) {
         {item.status === 'running' ? (
           <>
             <Text color="blue">
-              <Spinner type="dots" />
+              <Spinner />
             </Text>
             <Text> </Text>
           </>

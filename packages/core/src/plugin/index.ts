@@ -1,12 +1,10 @@
-export type {AgentPlugin, ExecuteResult, TurnContext} from './types.js';
-export {createTurnContext} from './types.js';
+export type {AgentPlugin, ExecuteResult, PluginTurnContext} from './types.js';
+export {createPluginTurnContext} from './types.js';
 export {PluginDriver} from './driver.js';
 export {sortPlugins} from './sort.js';
 export {
-  cursorPlugin,
   dagPlugin,
   defaultPlugins,
-  openaiPlugin,
   reactPlugin,
   routerPlugin,
   skillPlugin,

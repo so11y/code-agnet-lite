@@ -1,6 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
-import Spinner from 'ink-spinner';
+import {Spinner} from './Spinner.js';
 import type {AgentStatus, TokenUsage} from '@code-agent-lite/core';
 import {
   contextUsageColor,
@@ -59,7 +59,7 @@ export function StatusBar({status, message, tokenUsage}: Props) {
       <Text color={color}>
         {busy ? (
           <>
-            <Spinner type="dots" /> {text}
+            <Spinner /> {text}
           </>
         ) : (
           text

@@ -1,4 +1,3 @@
-export type {AgentAi} from './agent-ai.js';
 export type {
   AgentProviderKind,
   CursorAgentHandle,
@@ -8,14 +7,5 @@ export type {
   LlmProvider,
   ProviderLlmStreamOptions
 } from './types.js';
-export {OpenAiAgentProvider} from './openai-agent-provider.js';
-export {CursorAgentProvider} from './cursor-agent-provider.js';
-export {OpenAiLlmProvider} from './openai-provider.js';
-export {
-  ProviderRegistry,
-  disposeAgentSession,
-  getAgentAi,
-  getLlmProvider,
-  resetProvidersForTests,
-  resolveAgentProviderKind
-} from './provider-registry.js';
+export {OpenAiLlmProvider, openAiLlm} from './openai-provider.js';
+export {AgentProviderRegistry, agentProviders, type AgentProvider} from './provider-registry.js';

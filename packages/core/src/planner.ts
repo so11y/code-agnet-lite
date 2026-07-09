@@ -77,7 +77,7 @@ async function requestPlan(
 }
 
 export async function llmPlan(session: AgentSession) {
-  session.status('thinking', '规划');
+  session.events.status('thinking', '规划');
   await requestPlan(session, 'root', '当前假设：');
 }
 
@@ -113,7 +113,7 @@ export async function updateStateFromRun(
   error?: unknown,
   progressBefore = session.snapshotProgress()
 ) {
-  session.status('thinking', '复盘');
+  session.events.status('thinking', '复盘');
   const runFailed = didRunFail(result, error);
   const review = await StructuredLlmCaller.callWithHandler({
     messages: [

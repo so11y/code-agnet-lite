@@ -97,7 +97,15 @@ export function App({cwd}: Props) {
           setItems((current) =>
             current.map((item) =>
               item.type === 'tool' && item.item.id === event.id
-                ? {type: 'tool', item: {...item.item, output: event.output, error: event.error}}
+                ? {
+                    type: 'tool',
+                    item: {
+                      ...item.item,
+                      output: event.output,
+                      error: event.error,
+                      display: event.display
+                    }
+                  }
                 : item
             )
           );

@@ -1,13 +1,14 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 import type {ChatItem, ChatRole, ToolCallItem} from '@code-agent-lite/core';
-import {compactText} from '@code-agent-lite/shared';
 import {PlanTodoPanel} from './PlanTodoPanel.js';
 import type {PlanTodoState} from './plan-todo.js';
 import type {TranscriptItem} from './transcript.js';
 import {WelcomeHints} from './WelcomeHints.js';
+import {MessageContent} from './message-content.js';
+import {ToolBubbleBody} from './tool-preview.js';
 
-const MAX_TOOL_DETAIL = 2;
+const MAX_TOOL_DETAIL = 1;
 const THINKING_MAX_LINES = 4;
 
 type Props = {
@@ -22,18 +23,6 @@ const roleMeta: Record<ChatRole, {label: string; color: 'cyan' | 'green' | 'gray
   tool: {label: '工具', color: 'yellow'},
   thinking: {label: '思考', color: 'gray'}
 };
-
-function toolStatus(call: ToolCallItem) {
-  if (call.error) {
-    return {label: '失败', color: 'red' as const, detail: call.error};
-  }
-
-  if (call.output) {
-    return {label: '完成', color: 'green' as const, detail: call.output};
-  }
-
-  return {label: '运行中', color: 'yellow' as const};
-}
 
 function isToolRunning(call: ToolCallItem): boolean {
   return !call.output && !call.error;
@@ -59,16 +48,8 @@ function pickDetailToolIds(items: TranscriptItem[]): Set<string> {
 
 function CollapsedToolSummary({count}: {count: number}) {
   return (
-    <Box marginTop={1} paddingLeft={2}>
+    <Box marginTop={1}>
       <Text color="gray">··· 另有 {count} 个工具调用</Text>
-    </Box>
-  );
-}
-
-function CollapsedThinkingSummary({count}: {count: number}) {
-  return (
-    <Box marginTop={1} paddingLeft={2}>
-      <Text color="gray">··· 另有 {count} 段思考</Text>
     </Box>
   );
 }
@@ -86,33 +67,15 @@ function formatThinkingPreview(content: string): {text: string; omitted: number}
   };
 }
 
-function findLatestThinkingKey(items: TranscriptItem[]): string | undefined {
-  let messageCounter = 0;
-  let latest: string | undefined;
-
-  for (const entry of items) {
-    if (entry.type !== 'message') {
-      continue;
-    }
-
-    messageCounter += 1;
-    if (entry.item.role === 'thinking') {
-      latest = `thinking-${messageCounter}`;
-    }
-  }
-
-  return latest;
-}
-
 function ThinkingBubble({message, messageKey}: {message: ChatItem; messageKey: string}) {
   const {text, omitted} = formatThinkingPreview(message.content);
 
   return (
-    <Box key={messageKey} flexDirection="column" marginTop={1} paddingLeft={2}>
+    <Box key={messageKey} flexDirection="column" marginTop={1} width="100%">
       <Text color="gray" bold>
         思考
       </Text>
-      <Box borderStyle="round" borderColor="gray" paddingX={1} width="90%">
+      <Box borderStyle="round" borderColor="gray" paddingX={1} width="100%" flexDirection="column">
         {omitted > 0 ? (
           <Text color="gray" dimColor>
             ··· 已省略 {omitted} 行
@@ -127,33 +90,11 @@ function ThinkingBubble({message, messageKey}: {message: ChatItem; messageKey: s
   );
 }
 
-function ToolBubble({call, showOutput}: {call: ToolCallItem; showOutput: boolean}) {
-  const state = toolStatus(call);
-
-  return (
-    <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-      <Text wrap="truncate">
-        <Text color={state.color}>{state.label}</Text>
-        <Text color="gray"> 工具 </Text>
-        <Text color="yellow">{call.name}</Text>
-        <Text color="gray"> {compactText(call.input, 80)}</Text>
-      </Text>
-      {showOutput && state.detail ? (
-        <Text color={call.error ? 'red' : 'gray'} wrap="truncate">
-          {compactText(state.detail, 80)}
-        </Text>
-      ) : null}
-    </Box>
-  );
-}
-
 function renderTranscriptItems(items: TranscriptItem[]) {
   const detailToolIds = pickDetailToolIds(items);
   const latestToolId = [...items].reverse().find((entry) => entry.type === 'tool')?.item.id;
-  const latestThinkingKey = findLatestThinkingKey(items);
   const nodes: React.ReactNode[] = [];
   let collapsedToolCount = 0;
-  let collapsedThinkingCount = 0;
   let messageCounter = 0;
 
   const flushCollapsedTools = (key: string) => {
@@ -165,31 +106,15 @@ function renderTranscriptItems(items: TranscriptItem[]) {
     collapsedToolCount = 0;
   };
 
-  const flushCollapsedThinking = (key: string) => {
-    if (collapsedThinkingCount === 0) {
-      return;
-    }
-
-    nodes.push(<CollapsedThinkingSummary key={key} count={collapsedThinkingCount} />);
-    collapsedThinkingCount = 0;
-  };
-
-  const flushCollapsed = (key: string) => {
-    flushCollapsedTools(`${key}-tools`);
-    flushCollapsedThinking(`${key}-thinking`);
-  };
-
   for (const [index, entry] of items.entries()) {
     if (entry.type === 'tool') {
-      flushCollapsedThinking(`thinking-before-tool-${entry.item.id}`);
-
       if (detailToolIds.has(entry.item.id)) {
         flushCollapsedTools(`tool-before-${entry.item.id}`);
         nodes.push(
-          <ToolBubble
+          <ToolBubbleBody
             key={entry.item.id}
             call={entry.item}
-            showOutput={entry.item.id === latestToolId && !isToolRunning(entry.item)}
+            showOutput={!isToolRunning(entry.item) && entry.item.id === latestToolId}
           />
         );
         continue;
@@ -205,17 +130,14 @@ function renderTranscriptItems(items: TranscriptItem[]) {
     if (entry.item.role === 'thinking') {
       flushCollapsedTools(`tools-before-${messageKey}`);
 
-      if (messageKey === latestThinkingKey) {
-        flushCollapsedThinking(`thinking-before-${messageKey}`);
+      if (entry.item.content.trim() || entry.item.streaming) {
         nodes.push(<ThinkingBubble key={messageKey} message={entry.item} messageKey={messageKey} />);
-      } else {
-        collapsedThinkingCount += 1;
       }
 
       continue;
     }
 
-    flushCollapsed(`before-message-${index}`);
+    flushCollapsedTools(`before-message-${index}-tools`);
     nodes.push(
       <MessageBubble
         key={messageKey}
@@ -225,32 +147,28 @@ function renderTranscriptItems(items: TranscriptItem[]) {
     );
   }
 
-  flushCollapsed('collapsed-end');
+  flushCollapsedTools('collapsed-end');
   return nodes;
 }
 
 function MessageBubble({message, messageKey}: {message: ChatItem; messageKey: string}) {
   const meta = roleMeta[message.role];
-  const isUser = message.role === 'user';
 
   if (message.role === 'system') {
     return (
-      <Box key={messageKey} marginTop={1} paddingLeft={2}>
+      <Box key={messageKey} marginTop={1}>
         <Text color="gray">{message.content}</Text>
       </Box>
     );
   }
 
   return (
-    <Box key={messageKey} flexDirection="column" alignItems={isUser ? 'flex-end' : 'flex-start'} marginTop={1}>
+    <Box key={messageKey} flexDirection="column" marginTop={1} width="100%">
       <Text color={meta.color} bold>
         {meta.label}
       </Text>
-      <Box borderStyle="round" borderColor={meta.color} paddingX={1} width="90%">
-        <Text wrap="wrap">
-          {message.content}
-          {message.streaming ? <Text color="green">▌</Text> : null}
-        </Text>
+      <Box borderStyle="round" borderColor={meta.color} paddingX={1} width="100%">
+        <MessageContent content={message.content} streaming={message.streaming} />
       </Box>
     </Box>
   );

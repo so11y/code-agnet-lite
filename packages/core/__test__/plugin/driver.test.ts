@@ -1,9 +1,9 @@
-import {describe, expect, it, vi} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {PluginDriver} from '../../src/plugin/driver.js';
-import type {AgentPlugin, TurnContext} from '../../src/plugin/types.js';
+import type {AgentPlugin, PluginTurnContext} from '../../src/plugin/types.js';
 import {createAgentSession} from '../../src/session.js';
 
-function createCtx(input = 'hello', cwd = '/tmp'): TurnContext {
+function createCtx(input = 'hello', cwd = '/tmp'): PluginTurnContext {
   const events: unknown[] = [];
   const session = createAgentSession({
     cwd,
@@ -37,7 +37,9 @@ describe('PluginDriver', () => {
         name: 'agent',
         prepareAgent(ctx) {
           order.push('prepareAgent');
-          ctx.agent = {run: vi.fn(async () => ({completed: true, steps: 1, reason: 'final_answer'}))};
+          ctx.agent = {
+            run: async () => ({completed: true, steps: 1, reason: 'final_answer'})
+          };
         }
       },
       {
@@ -68,9 +70,9 @@ describe('PluginDriver', () => {
     const order: string[] = [];
 
     const plugins: AgentPlugin[] = [
-      {name: 'post', enforce: 'post', buildStart: () => order.push('post')},
-      {name: 'normal', buildStart: () => order.push('normal')},
-      {name: 'pre', enforce: 'pre', buildStart: () => order.push('pre')}
+      {name: 'post', enforce: 'post', buildStart: () => { order.push('post'); }},
+      {name: 'normal', buildStart: () => { order.push('normal'); }},
+      {name: 'pre', enforce: 'pre', buildStart: () => { order.push('pre'); }}
     ];
 
     const ctx = createCtx();

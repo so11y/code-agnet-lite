@@ -1,8 +1,8 @@
 import {useCallback, useEffect, useRef} from 'react';
 import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {
+  agentProviders,
   createAgentSession,
-  disposeAgentSession,
   runAgentTurn,
   type AgentEvent,
   type AgentSession
@@ -38,7 +38,7 @@ export function useAgentSession({onEvent}: Options) {
     sessionRef.current = null;
 
     if (session) {
-      void disposeAgentSession(session);
+      void agentProviders.dispose(session);
     }
   }, []);
 

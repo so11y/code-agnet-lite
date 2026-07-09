@@ -1,8 +1,6 @@
-import type {AgentProviderKind} from '@code-agent-lite/platform';
-import {createDefaultCodeAgent, isReActAgent} from '../code-agent.js';
-import {createCursorCodeAgent} from '../provider/cursor-code-agent.js';
+import {isReActAgent} from '../code-agent.js';
 import {runDagTurn} from '../dag/orchestrator.js';
-import {resolveAgentProviderKind} from '../provider/provider-registry.js';
+import {agentProviders} from '../provider/provider-registry.js';
 import {routeReasoningMode} from '../router.js';
 import {prepareTurn} from '../turn/prepare-turn.js';
 import {runPostTurnVerify} from '../turn/post-turn.js';
@@ -22,26 +20,8 @@ export function routerPlugin(): AgentPlugin {
   return {
     name: 'router',
     async resolveMode(input, ctx) {
-      ctx.session.status('thinking', '路由判断');
+      ctx.session.events.status('thinking', '路由判断');
       return routeReasoningMode(input, ctx.session);
-    }
-  };
-}
-
-export function openaiPlugin(): AgentPlugin {
-  return {
-    name: 'openai',
-    prepareAgent(ctx) {
-      ctx.agent = createDefaultCodeAgent(ctx.session.options, ctx.session);
-    }
-  };
-}
-
-export function cursorPlugin(): AgentPlugin {
-  return {
-    name: 'cursor',
-    prepareAgent(ctx) {
-      ctx.agent = createCursorCodeAgent(ctx.session.options, ctx.session);
     }
   };
 }
@@ -69,7 +49,7 @@ export function totPlugin(): AgentPlugin {
       }
 
       if (!isReActAgent(ctx.agent)) {
-        ctx.session.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
+        ctx.session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
         await ctx.agent.run();
         return {done: false};
       }
@@ -107,14 +87,11 @@ export function verifyPlugin(): AgentPlugin {
   };
 }
 
-export function defaultPlugins(provider?: AgentProviderKind): AgentPlugin[] {
-  const kind = resolveAgentProviderKind(provider);
-  const executor = kind === 'cursor' ? cursorPlugin() : openaiPlugin();
-
+export function defaultPlugins(): AgentPlugin[] {
   return [
     skillPlugin(),
     routerPlugin(),
-    executor,
+    agentProviders.plugin(),
     reactPlugin(),
     totPlugin(),
     dagPlugin(),

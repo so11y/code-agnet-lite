@@ -11,11 +11,13 @@ export const runCmdTool = createTool({
   async execute(input, context) {
     throwIfAborted(context.signal);
 
-    return runCommand(() =>
+    const output = await runCommand(() =>
       executeShellCommand(input.command, {
         cwd: context.cwd,
         signal: context.signal
       })
     );
+
+    return {output};
   }
 });

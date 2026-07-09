@@ -10,14 +10,27 @@
     "dev": "tsx packages/cli/src/main.tsx",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:debug-turn": "npm run test:debug-turn -w @code-agent-lite/core",
     "start": "node packages/cli/dist/main.js",
     "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "dependencies": {
+    "react": "19.2.7"
   },
   "devDependencies": {
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^22.13.5",
-    "@types/react": "^18.3.18",
+    "@types/react": "^19.2.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "react": "19.2.7",
+    "reactivity-store": {
+      "react": "19.2.7"
+    },
+    "use-sync-external-store": {
+      "react": "19.2.7"
+    }
   }
 }

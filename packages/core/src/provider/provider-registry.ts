@@ -1,69 +1,65 @@
 import {getAgentProviderKind} from '@code-agent-lite/platform';
+import {DefaultCodeAgent, type CodeAgent} from '../code-agent.js';
+import type {AgentPlugin} from '../plugin/types.js';
 import type {AgentSession} from '../session.js';
-import type {AgentAi} from './agent-ai.js';
-import {CursorAgentProvider} from './cursor-agent-provider.js';
-import {OpenAiAgentProvider} from './openai-agent-provider.js';
-import type {AgentProviderKind, LlmProvider} from './types.js';
-import {OpenAiLlmProvider} from './openai-provider.js';
+import {CursorCodeAgent} from './cursor-code-agent.js';
+import {getCursorSessionPool} from './cursor-session-pool.js';
+import type {AgentProviderKind} from './types.js';
 
-export class ProviderRegistry {
-  private openAiAgent?: OpenAiAgentProvider;
-  private cursorAgent?: CursorAgentProvider;
-  private llmProvider?: LlmProvider;
+export type AgentProvider = {
+  readonly kind: AgentProviderKind;
+  provide(session: AgentSession): CodeAgent;
+  dispose?(session: AgentSession): Promise<void>;
+};
 
-  resolveKind(override?: AgentProviderKind): AgentProviderKind {
-    return override ?? getAgentProviderKind();
+const providers: Record<AgentProviderKind, AgentProvider> = {
+  openai: {
+    kind: 'openai',
+    provide(session) {
+      return new DefaultCodeAgent(session.options, session);
+    }
+  },
+  cursor: {
+    kind: 'cursor',
+    provide(session) {
+      return new CursorCodeAgent(session.options, session);
+    },
+    dispose(session) {
+      return getCursorSessionPool().dispose(session);
+    }
   }
+};
 
-  getAgentAi(kind?: AgentProviderKind): AgentAi {
-    const resolved = this.resolveKind(kind);
+export class AgentProviderRegistry {
+  readonly defaultKind: AgentProviderKind = 'openai';
 
-    if (resolved === 'cursor') {
-      this.cursorAgent ??= new CursorAgentProvider();
-      return this.cursorAgent;
+  resolve(key?: AgentProviderKind): AgentProvider {
+    const kind = key ?? getAgentProviderKind() ?? this.defaultKind;
+    const provider = providers[kind];
+
+    if (!provider) {
+      throw new Error(`Unknown provider: ${kind}`);
     }
 
-    this.openAiAgent ??= new OpenAiAgentProvider();
-    return this.openAiAgent;
+    return provider;
   }
 
-  getLlmProvider(): LlmProvider {
-    this.llmProvider ??= new OpenAiLlmProvider();
-    return this.llmProvider;
+  provide(session: AgentSession): CodeAgent {
+    return this.resolve(session.options.provider).provide(session);
   }
 
-  async disposeSession(session: AgentSession, kind?: AgentProviderKind): Promise<void> {
-    await this.getAgentAi(kind ?? session.options.provider).disposeSession?.(session);
+  async dispose(session: AgentSession, kind?: AgentProviderKind): Promise<void> {
+    await this.resolve(kind ?? session.options.provider).dispose?.(session);
   }
 
-  resetForTests(): void {
-    this.openAiAgent = undefined;
-    this.cursorAgent = undefined;
-    this.llmProvider = undefined;
+  plugin(): AgentPlugin {
+    return {
+      name: 'provider',
+      prepareAgent: (ctx) => {
+        ctx.agent = this.provide(ctx.session);
+      }
+    };
   }
 }
 
-const defaultRegistry = new ProviderRegistry();
-
-export function resolveAgentProviderKind(override?: AgentProviderKind): AgentProviderKind {
-  return defaultRegistry.resolveKind(override);
-}
-
-export function getAgentAi(kind?: AgentProviderKind): AgentAi {
-  return defaultRegistry.getAgentAi(kind);
-}
-
-export function getLlmProvider(): LlmProvider {
-  return defaultRegistry.getLlmProvider();
-}
-
-export async function disposeAgentSession(
-  session: AgentSession,
-  kind?: AgentProviderKind
-): Promise<void> {
-  await defaultRegistry.disposeSession(session, kind);
-}
-
-export function resetProvidersForTests(): void {
-  defaultRegistry.resetForTests();
-}
+export const agentProviders = new AgentProviderRegistry();

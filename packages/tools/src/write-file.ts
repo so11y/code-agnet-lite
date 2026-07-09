@@ -1,7 +1,7 @@
-import {mkdir, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {z} from 'zod';
-import {resolveInsideCwd} from '@code-agent-lite/shared';
+import {buildSyntheticDiff, resolveInsideCwd} from '@code-agent-lite/shared';
 import {createTool} from './common.js';
 
 export const writeFileTool = createTool({
@@ -13,8 +13,24 @@ export const writeFileTool = createTool({
   }),
   async execute(input, context) {
     const filePath = resolveInsideCwd(context.cwd, input.path);
+    let before = '';
+
+    try {
+      before = await readFile(filePath, 'utf8');
+    } catch {
+      before = '';
+    }
+
     await mkdir(path.dirname(filePath), {recursive: true});
     await writeFile(filePath, input.content, 'utf8');
-    return `已写入 ${input.content.length} 个字符到 ${input.path}`;
+
+    const display = before
+      ? {kind: 'diff' as const, path: input.path, content: buildSyntheticDiff(input.path, before, input.content)}
+      : {kind: 'code' as const, path: input.path, content: input.content};
+
+    return {
+      output: `已写入 ${input.content.length} 个字符到 ${input.path}`,
+      display
+    };
   }
 });

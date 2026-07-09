@@ -40,9 +40,9 @@ export const gitDiffTool = createTool({
     });
 
     if (result.exitCode === 0 && !result.stdout?.trim()) {
-      return '无变更。';
+      return {output: '无变更。'};
     }
 
-    return formatCommandOutput(result);
+    return {output: formatCommandOutput(result)};
   }
 });

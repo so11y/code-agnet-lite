@@ -1,7 +1,7 @@
 import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall} from 'openai/resources/chat/completions';
 import {parseToolArgs} from './openai-message.js';
 import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
-import {truncate, TurnAbortedError, withTimeout, formatError} from '@code-agent-lite/shared';
+import {normalizeToolResult, truncate, TurnAbortedError, withTimeout, formatError} from '@code-agent-lite/shared';
 import {AgentSession} from './session.js';
 import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';
@@ -34,7 +34,7 @@ export abstract class ReActAgent {
       this.session.throwIfAborted();
 
       const remaining = this.maxSteps - step + 1;
-      this.session.status('thinking', `${step}/${this.maxSteps}`);
+      this.session.events.status('thinking', `${step}/${this.maxSteps}`);
 
       if (remaining <= WRAP_UP_THRESHOLD) {
         this.session.addSystemNote(buildWrapUpPrompt(remaining), {emit: false});
@@ -44,33 +44,32 @@ export abstract class ReActAgent {
       let streamedThinking = false;
 
       const message = await this.streamLlm(this.buildLlmMessages(), {
-        session: this.session,
-        signal: this.session.turnSignal(),
+        ...this.session.llmOptions(),
         onReasoningDelta: (delta) => {
           if (!streamedThinking) {
-            this.session.startThinkingStream();
+            this.session.events.startThinkingStream();
             streamedThinking = true;
           }
 
-          this.session.appendThinkingDelta(delta);
+          this.session.events.appendThinkingDelta(delta);
         },
         onDelta: (delta) => {
           if (!streamed) {
             if (streamedThinking) {
-              this.session.endThinkingStream();
+              this.session.events.endThinkingStream();
               streamedThinking = false;
             }
 
-            this.session.startAssistantStream();
+            this.session.events.startAssistantStream();
             streamed = true;
           }
 
-          this.session.appendAssistantDelta(delta);
+          this.session.events.appendAssistantDelta(delta);
         }
       });
 
       if (streamedThinking) {
-        this.session.endThinkingStream();
+        this.session.events.endThinkingStream();
       }
 
       this.session.commitAssistant(message, streamed);
@@ -104,7 +103,7 @@ export abstract class ReActAgent {
     const call: ToolCallItem = {id: toolCall.id, name: toolCall.function.name, input};
     const tool = this.findTool(call.name);
 
-    this.session.startTool(call);
+    this.session.events.startTool(call);
 
     if (!tool) {
       this.failTool(call.id, `未知工具：${call.name}`);
@@ -125,16 +124,22 @@ export abstract class ReActAgent {
     this.session.recordToolCall(call.name, parsed.data);
 
     try {
-      const output = await withTimeout(
-        tool.execute(parsed.data, {
-          cwd: this.session.cwd,
-          setCwd: (cwd) => this.session.setWorkspace(cwd),
-          signal: this.session.turnSignal()
-        }),
-        this.toolTimeoutMs(),
-        this.session.turnSignal()
+      const {output, display} = normalizeToolResult(
+        await withTimeout(
+          tool.execute(parsed.data, {
+            cwd: this.session.cwd,
+            setCwd: (cwd) => this.session.setWorkspace(cwd),
+            signal: this.session.turnSignal()
+          }),
+          this.toolTimeoutMs(),
+          this.session.turnSignal()
+        )
       );
-      this.session.finishTool(call.id, truncate(output));
+      this.session.finishTool(call.id, truncate(output), {
+        display,
+        toolName: call.name,
+        toolInput: call.input
+      });
     } catch (error) {
       if (error instanceof TurnAbortedError) {
         throw error;
@@ -149,6 +154,6 @@ export abstract class ReActAgent {
   }
 
   private failTool(id: string, message: string) {
-    this.session.finishTool(id, message, message);
+    this.session.finishTool(id, message, {error: message});
   }
 }

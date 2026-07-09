@@ -7,20 +7,18 @@ import {StateDeltaProjector} from './state-delta-projector.js';
 import {
   type AgentMessage,
   type AgentSessionOptions,
-  type AgentStatus,
-  type ChatRole,
   type InternalState,
   type LlmOptions,
   type ReasoningMode,
   type TokenUsage,
-  type ToolCallItem,
-  type TurnContext,
-  type TurnOperations
+  type TurnOperations,
+  type TurnSummary
 } from './session-types.js';
 import {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
 import {ConversationStore} from './session/conversation-store.js';
 import {SessionEventBus} from './session/event-bus.js';
 import {TurnLedger} from './session/turn-ledger.js';
+import type {FinishToolOptions} from './session/finish-tool-options.js';
 
 export class AgentSession {
   cwd: string;
@@ -54,6 +52,10 @@ export class AgentSession {
 
   get tokenUsage(): TokenUsage {
     return this.events_.tokenUsage;
+  }
+
+  get events(): SessionEventBus {
+    return this.events_;
   }
 
   beginTurn(userInput: string) {
@@ -115,8 +117,8 @@ export class AgentSession {
     return this.ledger_.refreshOperations();
   }
 
-  collectTurnContext(): TurnContext {
-    return this.ledger_.collectTurnContext(this.extractLastAssistantText());
+  collectTurnSummary(): TurnSummary {
+    return this.ledger_.collectTurnSummary(this.extractLastAssistantText());
   }
 
   snapshotProgress() {
@@ -135,38 +137,6 @@ export class AgentSession {
     }
 
     return target;
-  }
-
-  recordTokenUsage(usage: TokenUsage) {
-    this.events_.recordTokenUsage(usage);
-  }
-
-  status(status: AgentStatus, message?: string) {
-    this.events_.status(status, message);
-  }
-
-  say(role: ChatRole, content: string) {
-    this.events_.say(role, content);
-  }
-
-  startAssistantStream() {
-    this.events_.startAssistantStream();
-  }
-
-  appendAssistantDelta(delta: string) {
-    this.events_.appendAssistantDelta(delta);
-  }
-
-  startThinkingStream() {
-    this.events_.startThinkingStream();
-  }
-
-  appendThinkingDelta(delta: string) {
-    this.events_.appendThinkingDelta(delta);
-  }
-
-  endThinkingStream() {
-    this.events_.endThinkingStream();
   }
 
   commitAssistant(message: ChatCompletionAssistantMessageParam, streamed: boolean) {
@@ -207,12 +177,8 @@ export class AgentSession {
     this.conversation_.clearSkillCatalog();
   }
 
-  startTool(call: ToolCallItem) {
-    this.events_.startTool(call);
-  }
-
-  finishTool(id: string, content: string, error?: string) {
-    this.conversation_.finishTool(id, content, error);
+  finishTool(id: string, content: string, options?: FinishToolOptions) {
+    this.conversation_.finishTool(id, content, options);
   }
 
   setWorkspace(cwd: string) {

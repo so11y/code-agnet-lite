@@ -3,15 +3,14 @@ import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/co
 import type {ChatCompletion} from 'openai/resources/chat/completions';
 import type {AgentTool} from '@code-agent-lite/tools';
 import {createDefaultToolRegistry} from '../tool-registry.js';
-import type {AgentSession} from '../session.js';
 import {
   getOpenAiBaseUrl,
   getOpenAiModel,
   getRequiredOpenAiApiKey,
   isThinkingEnabled
 } from '@code-agent-lite/platform';
-import type {AgentMessage, ChatRole, TokenUsage} from '../session-types.js';
-import {normalizeOpenAiUsage, recordTokenUsage} from './token-usage.js';
+import type {AgentMessage, TokenUsage} from '../session-types.js';
+import {normalizeOpenAiUsage} from './token-usage.js';
 import type {LlmCallOptions, LlmProvider, ProviderLlmStreamOptions} from './types.js';
 
 const DEFAULT_MODEL = '';
@@ -29,14 +28,13 @@ function readReasoningContent(message: unknown): string | undefined {
   return typeof reasoning === 'string' && reasoning.trim() ? reasoning : undefined;
 }
 
-function emitPlainReasoning(options: LlmCallOptions | undefined, message: unknown) {
+function emitPlainReasoning(session: LlmCallOptions['session'], message: unknown) {
   const reasoning = readReasoningContent(message);
-  if (!reasoning || !options?.session) {
+  if (!reasoning || !session) {
     return;
   }
 
-  const session = options.session as {say?(role: ChatRole, content: string): void};
-  session.say?.('thinking', reasoning);
+  session.events.say('thinking', reasoning);
 }
 
 let sharedClient: OpenAI | undefined;
@@ -52,9 +50,8 @@ function createClient() {
   return sharedClient;
 }
 
-function resolveTools(options?: LlmCallOptions): readonly AgentTool[] {
-  const session = options?.session as AgentSession | undefined;
-  return session?.toolRegistry.tools ?? createDefaultToolRegistry().tools;
+function resolveTools(session: LlmCallOptions['session']): readonly AgentTool[] {
+  return session ? session.toolRegistry.tools : createDefaultToolRegistry().tools;
 }
 
 export class OpenAiLlmProvider implements LlmProvider {
@@ -62,7 +59,7 @@ export class OpenAiLlmProvider implements LlmProvider {
 
   private createChatCompletion(messages: AgentMessage[], withTools: boolean, options?: LlmCallOptions) {
     const thinking = thinkingExtraBody();
-    const toolList = resolveTools(options);
+    const toolList = resolveTools(options?.session);
 
     return createClient().chat.completions.create({
       model: getOpenAiModel(DEFAULT_MODEL),
@@ -83,8 +80,11 @@ export class OpenAiLlmProvider implements LlmProvider {
     options?: LlmCallOptions
   ): Promise<ChatCompletion> {
     const response = await this.createChatCompletion(messages, withTools, options);
-    recordTokenUsage(options?.session, normalizeOpenAiUsage(response.usage));
-    emitPlainReasoning(options, response.choices[0]?.message);
+    const usage = normalizeOpenAiUsage(response.usage);
+    if (usage && options?.session) {
+      options.session.events.recordTokenUsage(usage);
+    }
+    emitPlainReasoning(options?.session, response.choices[0]?.message);
     return response;
   }
 
@@ -101,7 +101,7 @@ export class OpenAiLlmProvider implements LlmProvider {
     options: ProviderLlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam> {
     const thinking = thinkingExtraBody();
-    const toolList = resolveTools(options);
+    const toolList = resolveTools(options.session);
 
     const stream = await createClient().chat.completions.create({
       model: getOpenAiModel(DEFAULT_MODEL),
@@ -168,7 +168,9 @@ export class OpenAiLlmProvider implements LlmProvider {
       }
     }
 
-    recordTokenUsage(options?.session, usage);
+    if (usage && options.session) {
+      options.session.events.recordTokenUsage(usage);
+    }
 
     const toolCalls = [...toolCallsByIndex.entries()]
       .sort(([left], [right]) => left - right)
@@ -189,3 +191,5 @@ export class OpenAiLlmProvider implements LlmProvider {
     };
   }
 }
+
+export const openAiLlm = new OpenAiLlmProvider();

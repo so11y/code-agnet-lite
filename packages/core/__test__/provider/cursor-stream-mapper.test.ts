@@ -7,11 +7,12 @@ import {
   type CursorStreamMapperSink,
   type CursorSdkMessage
 } from '../../src/provider/cursor-stream-mapper.js';
+import type {FinishToolOptions} from '../../src/session/finish-tool-options.js';
 import type {TokenUsage, ToolCallItem} from '../../src/session-types.js';
 
 function createSink() {
   const toolStarts: ToolCallItem[] = [];
-  const toolEnds: Array<{id: string; output: string; error?: string}> = [];
+  const toolEnds: Array<{id: string; output: string; options?: FinishToolOptions}> = [];
   const texts: string[] = [];
   const usages: TokenUsage[] = [];
 
@@ -19,8 +20,8 @@ function createSink() {
     startTool(call) {
       toolStarts.push(call);
     },
-    finishTool(id, output, error) {
-      toolEnds.push({id, output, error});
+    finishTool(id, output, options) {
+      toolEnds.push({id, output, options});
     },
     appendAssistantDelta(text) {
       texts.push(text);
@@ -57,7 +58,7 @@ describe('formatCursorToolOutput', () => {
 describe('mapCursorStreamEvent', () => {
   it('maps running tool_call to startTool', () => {
     const {sink, toolStarts, toolEnds} = createSink();
-    const openTools = new Set<string>();
+    const openTools = new Map<string, ToolCallItem>();
 
     const result = mapCursorStreamEvent(
       {
@@ -79,7 +80,9 @@ describe('mapCursorStreamEvent', () => {
 
   it('maps completed tool_call to finishTool', () => {
     const {sink, toolStarts, toolEnds} = createSink();
-    const openTools = new Set<string>(['call-1']);
+    const openTools = new Map<string, ToolCallItem>([
+      ['call-1', {id: 'call-1', name: 'read_file', input: {path: 'a.ts'}}]
+    ]);
 
     mapCursorStreamEvent(
       {
@@ -94,7 +97,7 @@ describe('mapCursorStreamEvent', () => {
     );
 
     expect(toolStarts).toEqual([]);
-    expect(toolEnds).toEqual([{id: 'call-1', output: 'file content'}]);
+    expect(toolEnds).toEqual([{id: 'call-1', output: 'file content', options: {toolName: 'read_file', toolInput: {path: 'a.ts'}}}]);
     expect(openTools.has('call-1')).toBe(false);
   });
 
@@ -113,7 +116,7 @@ describe('mapCursorStreamEvent', () => {
         }
       },
       sink,
-      new Set()
+      new Map<string, ToolCallItem>()
     );
 
     expect(result).toBe('usage');
@@ -133,7 +136,7 @@ describe('mapCursorStreamEvent', () => {
     const result = mapCursorStreamEvent(
       {type: 'assistant', delta: 'hi'},
       sink,
-      new Set()
+      new Map<string, ToolCallItem>()
     );
 
     expect(result).toBe('text');

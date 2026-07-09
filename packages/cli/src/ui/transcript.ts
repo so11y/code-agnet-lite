@@ -5,7 +5,12 @@ export type TranscriptItem =
   | {type: 'tool'; item: ToolCallItem};
 
 export function isInternalSystemMessage(content: string): boolean {
-  return content.startsWith('[stateΔ') || content.startsWith('[upstream]') || content.startsWith('[本节点目标]');
+  return (
+    content.startsWith('[stateΔ') ||
+    content.startsWith('[upstream]') ||
+    content.startsWith('[本节点目标]') ||
+    content.startsWith('[Rule:')
+  );
 }
 
 export function updateStreamingMessage(

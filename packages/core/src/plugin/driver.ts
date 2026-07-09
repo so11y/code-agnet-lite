@@ -1,12 +1,12 @@
 import type {AgentSession} from '../session.js';
 import {sortPlugins} from './sort.js';
-import {createTurnContext, type AgentPlugin, type TurnContext} from './types.js';
+import {createPluginTurnContext, type AgentPlugin, type PluginTurnContext} from './types.js';
 
 export class PluginDriver {
   constructor(private readonly plugins: AgentPlugin[]) {}
 
   async run(input: string, cwd: string, session: AgentSession): Promise<void> {
-    const ctx = createTurnContext(session, input, cwd);
+    const ctx = createPluginTurnContext(session, input, cwd);
     const plugins = sortPlugins(this.plugins);
 
     for (const plugin of plugins) {
@@ -32,7 +32,7 @@ export class PluginDriver {
 
     if (ctx.route) {
       session.reasoningMode = ctx.route.mode;
-      session.say('system', `路由 → ${ctx.route.mode}：${ctx.route.reason}`);
+      session.events.say('system', `路由 → ${ctx.route.mode}：${ctx.route.reason}`);
     }
 
     for (const plugin of plugins) {
