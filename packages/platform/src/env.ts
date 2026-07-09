@@ -86,5 +86,43 @@ export function getCursorApiKey(): string {
 }
 
 export function getCursorModel(): string {
-  return process.env.CURSOR_MODEL?.trim() || 'claude-sonnet-4';
+  return getCursorModelSelection().id;
+}
+
+export type CursorModelParam = {
+  id: string;
+  value: string;
+};
+
+export type CursorModelSelection = {
+  id: string;
+  params?: CursorModelParam[];
+};
+
+function parseCursorModelFast(): boolean | undefined {
+  const value = process.env.CURSOR_MODEL_FAST?.trim().toLowerCase();
+  if (value === undefined || value === '') {
+    return;
+  }
+
+  return value !== 'false' && value !== '0';
+}
+
+export function getCursorModelSelection(): CursorModelSelection {
+  let modelId = process.env.CURSOR_MODEL?.trim() || 'composer-2.5';
+  let fast = parseCursorModelFast();
+
+  if (modelId.endsWith('-fast')) {
+    modelId = modelId.slice(0, -'-fast'.length);
+    fast ??= true;
+  }
+
+  if (fast === undefined || !modelId.startsWith('composer-')) {
+    return {id: modelId};
+  }
+
+  return {
+    id: modelId,
+    params: [{id: 'fast', value: fast ? 'true' : 'false'}]
+  };
 }

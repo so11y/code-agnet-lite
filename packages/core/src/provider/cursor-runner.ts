@@ -1,6 +1,6 @@
 /// <reference path="./cursor-sdk.d.ts" />
 
-import {getCursorApiKey, getCursorModel} from '@code-agent-lite/platform';
+import {getCursorApiKey, getCursorModelSelection} from '@code-agent-lite/platform';
 import type {AgentSession} from '../session.js';
 import type {CursorAgentHandle} from './types.js';
 
@@ -69,7 +69,7 @@ export async function createCursorAgent(cwd: string): Promise<CursorAgentHandle>
   const {Agent} = await loadCursorSdk();
   const agent = (await Agent.create({
     apiKey: getCursorApiKey(),
-    model: {id: getCursorModel()},
+    model: getCursorModelSelection(),
     local: {cwd}
   })) as CursorSdkAgent;
 
