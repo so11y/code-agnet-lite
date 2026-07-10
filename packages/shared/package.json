@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "diff": "^9.0.0",
     "execa": "^9.5.2",
     "lodash-es": "^4.18.1"
   }

@@ -10,11 +10,11 @@ npm install
 npm run dev
 ```
 
-Provider 可选 `AGENT_PROVIDER=openai|cursor`（见 `packages/platform`）。
+Provider 可选 `AGENT_PROVIDER=openai|cursor`（见 `packages/platform`）。该选项只影响 **Agent 执行层**；router / planner 等结构化 LLM 调用目前固定走 OpenAI（见架构文档）。
 
 ## 架构
 
-见 [docs/architecture.md](docs/architecture.md)。
+实现说明见 [docs/architecture.md](docs/architecture.md)。`md/` 目录为设计探索笔记，非实现权威。
 
 ## 包
 

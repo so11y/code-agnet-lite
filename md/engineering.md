@@ -1,3 +1,5 @@
+> **说明：** 本文为设计笔记（Loop / Harness 工程思路）。当前实现的权威描述见 [docs/architecture.md](../docs/architecture.md)。
+
 Prompt Engineering 怎么问模型
 Context Engineering 给模型什么上下文
 Harness Engineering 不是只调模型，而是设计“模型外面那一整套工程壳子”。工具、上下文、记忆、流程、权限、验证、观察、回滚、日志、评估等外部系统

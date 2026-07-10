@@ -1,8 +1,6 @@
 import {throwIfAborted} from '@code-agent-lite/shared';
-import type {AgentRule, RuleContextState} from '@code-agent-lite/tools';
 
 import type {Skill} from './skill-registry.js';
-
 import {createDefaultSkillRegistry, type SkillRegistry} from './skill-registry.js';
 
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
@@ -71,9 +69,6 @@ export class AgentSession {
 
   private loadedSkillNames_ = new Set<string>();
 
-  private loadedRuleIds_ = new Set<string>();
-
-
 
   constructor(readonly options: AgentSessionOptions) {
 
@@ -120,24 +115,6 @@ export class AgentSession {
   get events(): SessionEventBus {
 
     return this.events_;
-
-  }
-
-
-
-  ruleContextState(): RuleContextState {
-
-    const operations = this.refreshOperations();
-
-    return {
-
-      visitedFiles: this.state.visitedFiles,
-
-      writtenFiles: operations.writtenFiles,
-
-      deletedFiles: operations.deletedFiles
-
-    };
 
   }
 
@@ -350,24 +327,6 @@ export class AgentSession {
     this.loadedSkillNames_.add(skill.name);
 
     this.addSystemNote(this.skillRegistry.formatForPrompt(skill), {emit: true});
-
-  }
-
-
-
-  hasLoadedRule(id: string): boolean {
-
-    return this.loadedRuleIds_.has(id);
-
-  }
-
-
-
-  injectRule(rule: AgentRule) {
-
-    this.loadedRuleIds_.add(rule.id);
-
-    this.conversation_.injectRule(rule);
 
   }
 

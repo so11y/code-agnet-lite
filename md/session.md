@@ -1,5 +1,7 @@
 # Agent 中的 Session、Summary 与召回（Recall）
 
+> **说明：** 本文为设计笔记，用于概念背景学习。当前实现的权威描述见 [docs/architecture.md](../docs/architecture.md)。
+
 ## 问题背景
 
 很多人第一次实现 Agent 时，会这样做：

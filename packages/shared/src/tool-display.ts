@@ -1,3 +1,4 @@
+import {createTwoFilesPatch} from 'diff';
 import {pickStringField} from './object.js';
 
 export type ToolDisplay =
@@ -43,31 +44,9 @@ export function buildSyntheticDiff(path: string, before: string, after: string):
     return '无变更。';
   }
 
-  const lines = [`--- a/${path}`, `+++ b/${path}`];
-
-  if (!before) {
-    for (const line of after.split('\n')) {
-      lines.push(`+${line}`);
-    }
-    return lines.join('\n');
-  }
-
-  if (!after) {
-    for (const line of before.split('\n')) {
-      lines.push(`-${line}`);
-    }
-    return lines.join('\n');
-  }
-
-  for (const line of before.split('\n')) {
-    lines.push(`-${line}`);
-  }
-
-  for (const line of after.split('\n')) {
-    lines.push(`+${line}`);
-  }
-
-  return lines.join('\n');
+  return createTwoFilesPatch(`a/${path}`, `b/${path}`, before, after, undefined, undefined, {
+    context: 3
+  }).trim();
 }
 
 export function inferToolDisplay(name: string, output: string, input?: unknown): ToolDisplay | undefined {

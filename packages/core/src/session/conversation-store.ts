@@ -1,6 +1,4 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import type {AgentRule} from '@code-agent-lite/tools';
-import {formatRuleForPrompt} from '@code-agent-lite/tools';
 import {messageText} from '../openai-message.js';
 import {createWorkspaceSystemMessages} from '../prompt.js';
 import type {AgentMessage, ChatRole} from '../session-types.js';
@@ -60,10 +58,6 @@ export class ConversationStore {
   finishTool(id: string, content: string, options?: FinishToolOptions) {
     this.messages.push({role: 'tool', tool_call_id: id, content});
     this.events.finishTool(id, content, options);
-  }
-
-  injectRule(rule: AgentRule) {
-    this.addSystemNote(formatRuleForPrompt(rule), {emit: false});
   }
 
   setSkillCatalog(content: string, cwd: string) {

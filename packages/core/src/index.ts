@@ -13,7 +13,6 @@ export {openAiLlm} from './provider/openai-provider.js';
 export * from './openai-message.js';
 export {runAgentTurn} from './loop.js';
 export * from './skills/index.js';
-export * from './rules/index.js';
 export {llmPlan, llmReplan, updateStateFromRun} from './planner.js';
 export {routeReasoningMode, type ReasoningRoute} from './router.js';
 export {
@@ -54,10 +53,10 @@ export {
   type TaskNode,
   type TaskNodeKind,
   type TaskNodeStatus,
-  type TaskOutput
-} from './dag/types.js';
-export {runDagTurn} from './dag/orchestrator.js';
-export {topologicalSortIds} from './dag/graph-utils.js';
+  type TaskOutput,
+  runDagTurn,
+  topologicalSortIds
+} from './dag/index.js';
 export {
   AgentProviderRegistry,
   agentProviders,
