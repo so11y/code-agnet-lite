@@ -13,6 +13,6 @@ export type AgentTool<TSchema extends z.ZodTypeAny = z.ZodTypeAny> = {
 
 export type ToolContext = {
   cwd: string;
-  setCwd(cwd: string): void;
+  setCwd(cwd: string): void | Promise<void>;
   signal?: AbortSignal;
 };

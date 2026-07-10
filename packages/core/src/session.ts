@@ -1,39 +1,36 @@
-import { throwIfAborted } from "@code-agent-lite/shared";
+import {throwIfAborted} from '@code-agent-lite/shared';
 
 import {
   createStateDeltaProjectorState,
   flushStateDelta,
   type StateDeltaProjectorState
-} from "./state-delta-projector.js";
+} from './state-delta-projector.js';
 
 import {
   type AgentMessage,
   type AgentSessionOptions,
   type LlmOptions,
   type ReasoningMode
-} from "./session-types.js";
+} from './session-types.js';
 
-import {
-  createDefaultToolRegistry,
-  type ToolRegistry
-} from "./tool-registry.js";
+import {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
 
-import { Skills } from "./skills/skills.js";
+import {Skills} from './skills/skills.js';
 
-import { ConversationStore } from "./session/conversation-store.js";
+import {ConversationStore} from './session/conversation-store.js';
 
-import { SessionEventBus } from "./session/event-bus.js";
+import {SessionEventBus} from './session/event-bus.js';
 
-import { TurnLedger } from "./session/turn-ledger.js";
+import {TurnLedger} from './session/turn-ledger.js';
 
-import { PluginDriver } from "./plugin/driver.js";
+import {PluginDriver} from './plugin/driver.js';
 
-import { defaultPlugins } from "./plugin/builtins.js";
+import {defaultPlugins} from './plugin/builtins.js';
 
-import { createPluginSessionContext, HookStrategy, PluginHook } from "./plugin/types.js";
+import {createPluginSessionContext, HookStrategy, PluginHook} from './plugin/types.js';
 
-export type OpenAgentSessionOptions = Omit<AgentSessionOptions, "plugins"> & {
-  plugins?: AgentSessionOptions["plugins"];
+export type OpenAgentSessionOptions = Omit<AgentSessionOptions, 'plugins'> & {
+  plugins?: AgentSessionOptions['plugins'];
 };
 
 export class AgentSession {
@@ -53,8 +50,9 @@ export class AgentSession {
 
   readonly ledger: TurnLedger;
 
-  private readonly stateProjector_: StateDeltaProjectorState =
-    createStateDeltaProjectorState();
+  private readonly pluginDriver_: PluginDriver;
+
+  private readonly stateProjector_: StateDeltaProjectorState = createStateDeltaProjectorState();
 
   private turnSignal_?: AbortSignal;
 
@@ -70,17 +68,14 @@ export class AgentSession {
     this.skills = Skills.create(this.conversation, options.skills);
 
     this.ledger = new TurnLedger();
-  }
 
-  private driver(): PluginDriver {
-    return new PluginDriver(this.options.plugins ?? []);
+    this.pluginDriver_ = new PluginDriver(options.plugins ?? defaultPlugins());
   }
 
   static async open(options: AgentSessionOptions): Promise<AgentSession> {
-    const driver = new PluginDriver(options.plugins ?? []);
     const session = new AgentSession(options);
 
-    await driver.runHook(
+    await session.pluginDriver_.runHook(
       PluginHook.SessionReady,
       HookStrategy.Void,
       createPluginSessionContext(session)
@@ -106,7 +101,7 @@ export class AgentSession {
   }
 
   async dispose(): Promise<void> {
-    await this.driver().runHook(
+    await this.pluginDriver_.runHook(
       PluginHook.SessionDispose,
       HookStrategy.Void,
       createPluginSessionContext(this)
@@ -115,6 +110,10 @@ export class AgentSession {
     if (AgentSession.current === this) {
       AgentSession.current = null;
     }
+  }
+
+  async runPluginTurn(input: string, cwd?: string): Promise<void> {
+    await this.pluginDriver_.run(input, cwd ?? this.cwd, this);
   }
 
   setTurnSignal(signal?: AbortSignal) {
@@ -130,7 +129,7 @@ export class AgentSession {
   }
 
   llmOptions(): LlmOptions {
-    return { session: this, signal: this.turnSignal_ };
+    return {session: this, signal: this.turnSignal_};
   }
 
   flushStateDelta() {
@@ -158,6 +157,14 @@ export class AgentSession {
     return Promise.resolve(target);
   }
 
+  async setWorkspace(cwd: string): Promise<void> {
+    if (cwd === this.cwd) {
+      return;
+    }
+
+    await this.changeWorkspace_(cwd);
+  }
+
   private changeWorkspace_(cwd: string): Promise<string> {
     const prev = this.cwd;
 
@@ -165,27 +172,8 @@ export class AgentSession {
 
     this.events.setWorkspace(cwd);
 
-    return this.driver()
+    return this.pluginDriver_
       .runHook(PluginHook.WorkspaceChange, HookStrategy.Void, createPluginSessionContext(this), prev)
       .then(() => cwd);
-  }
-
-  setWorkspace(cwd: string) {
-    if (cwd === this.cwd) {
-      return;
-    }
-
-    const prev = this.cwd;
-
-    this.cwd = cwd;
-
-    this.events.setWorkspace(cwd);
-
-    void this.driver().runHook(
-      PluginHook.WorkspaceChange,
-      HookStrategy.Void,
-      createPluginSessionContext(this),
-      prev
-    );
   }
 }

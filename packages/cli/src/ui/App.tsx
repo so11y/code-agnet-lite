@@ -2,7 +2,7 @@ import path from 'node:path';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
 import {createTokenUsage, createDefaultSkillRegistry, isAgentBusy, type AgentEvent, type AgentStatus, type ChatItem, type SkillMeta, type TokenUsage} from '@code-agent-lite/core';
-import {getAgentProviderKind, resolveWorkspaceDirectory} from '@code-agent-lite/platform';
+import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {formatError, isAbortError} from '@code-agent-lite/shared';
 import {handleSubmit} from '../services/submit-handler.js';
 import {ChatPanel} from './ChatPanel.js';
@@ -154,25 +154,6 @@ export function App({cwd}: Props) {
     [appendMessage, runTurn, updateStatus]
   );
 
-  const switchWorkspace = useCallback(
-    async (input: string, target: string) => {
-      updateStatus('thinking', target);
-      appendMessage({role: 'user', content: input});
-
-      try {
-        const resolved = await resolveWorkspaceDirectory(workspace, target);
-        setWorkspace(resolved);
-        updateStatus('idle', resolved);
-        appendMessage({role: 'system', content: `工作区：${resolved}`});
-      } catch (error) {
-        const message = formatError(error);
-        updateStatus('error', message);
-        appendMessage({role: 'system', content: message});
-      }
-    },
-    [appendMessage, updateStatus, workspace]
-  );
-
   const busy = isAgentBusy(status);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -191,13 +172,11 @@ export function App({cwd}: Props) {
         workspace,
         appendMessage,
         updateStatus,
-        setWorkspace,
         resetSession,
-        switchWorkspace,
         runInWorkspace
       });
     },
-    [appendMessage, resetSession, runInWorkspace, switchWorkspace, updateStatus, workspace]
+    [appendMessage, resetSession, runInWorkspace, updateStatus, workspace]
   );
 
   const suggestionMode = parseSuggestionContext(inputValue) !== null;

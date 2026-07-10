@@ -4,8 +4,3 @@ import type {AgentSession} from '../session.js';
 export async function mountSkillCatalog(session: AgentSession, cwd: string): Promise<void> {
   await session.skills.mountCatalog(cwd);
 }
-
-/** @deprecated 使用 session.skills.mountCatalog */
-export async function ensureSkillCatalog(session: AgentSession, cwd: string): Promise<void> {
-  await session.skills.mountCatalog(cwd);
-}

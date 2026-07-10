@@ -9,8 +9,6 @@ export type CommandHint = {
 export const STATIC_COMMANDS: CommandHint[] = [
   {command: '/new', description: '开始新对话'},
   {command: '/clear', description: '清空当前对话'},
-  {command: '/workspace', description: '切换工作区', example: '/workspace path/to/dir'},
-  {command: '/cwd', description: '切换工作区（同 /workspace）', example: '/cwd path/to/dir'},
   {command: '/skill', description: '加载 Skill 并执行任务', example: '/skill name 任务描述'}
 ];
 

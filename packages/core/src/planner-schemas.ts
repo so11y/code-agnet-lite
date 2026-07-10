@@ -1,7 +1,7 @@
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {z} from 'zod';
 
-/** Planner 输出：工作假设与验证计划（对应 session.state.hypotheses） */
+/** Planner 输出：工作假设与验证计划（对应 session.ledger.state.hypotheses） */
 export const planSchema = z.object({
   summary: z.string().describe('一句简洁的中文摘要'),
   hypotheses: z
@@ -15,7 +15,7 @@ export const planSchema = z.object({
     .describe('ReAct 执行器必须完成的验证项')
 });
 
-/** Review 输出：复盘结果（写入 session.state 的 facts / rejected / hypotheses） */
+/** Review 输出：复盘结果（写入 session.ledger.state 的 facts / rejected / hypotheses） */
 export const reviewSchema = z.object({
   directionCorrect: z.boolean().describe('当前假设方向是否基本正确'),
   summary: z.string().describe('复盘摘要，需包含执行过程中实际发生了什么'),
@@ -23,7 +23,7 @@ export const reviewSchema = z.object({
   facts: z
     .array(z.string().describe('单条已知事实'))
     .default([])
-    .describe('从对话记录中可观察到的已知事实，写入 session.state.facts'),
+    .describe('从对话记录中可观察到的已知事实，写入 session.ledger.state.facts'),
   rejected: z
     .array(z.string().describe('单条被否定的假设'))
     .default([])

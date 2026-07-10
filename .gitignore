@@ -5,3 +5,4 @@ packages/*/dist/
 .DS_Store
 npm-debug.log*
 .agent
+*.tsbuildinfo

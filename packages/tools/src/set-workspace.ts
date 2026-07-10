@@ -11,7 +11,7 @@ export const setWorkspaceTool = createTool({
   async execute(input, context) {
     const resolved = await resolveWorkspaceDirectory(context.cwd, input.cwd);
 
-    context.setCwd(resolved);
+    await Promise.resolve(context.setCwd(resolved));
     return `工作区已切换至 ${resolved}`;
   }
 });
