@@ -89,6 +89,17 @@ function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
 function createWorkerOnEvent(parent: AgentSessionOptions, node: TaskNode): AgentSessionOptions['onEvent'] {
   return (event: AgentEvent) => {
     switch (event.type) {
+      case 'status':
+        parent.onEvent(event);
+        break;
+      case 'thinking_start':
+        parent.onEvent({type: 'thinking_start'});
+        parent.onEvent({type: 'thinking_delta', delta: `[${node.id}]\n`});
+        break;
+      case 'thinking_delta':
+      case 'thinking_end':
+        parent.onEvent(event);
+        break;
       case 'tool_start':
         parent.onEvent({
           type: 'tool_start',

@@ -4,6 +4,7 @@ import {gitDiffTool} from './git-diff.js';
 import {grepTool} from './grep.js';
 import {listFilesTool} from './list-files.js';
 import {listSkillsTool} from './list-skills.js';
+import {listUsersTool} from './list-users.js';
 import {loadSkillTool} from './load-skill.js';
 import {readFileTool} from './read-file.js';
 import {runCmdTool} from './run-cmd.js';
@@ -21,6 +22,7 @@ export const tools: AgentTool[] = [
   webSearchTool,
   listFilesTool,
   listSkillsTool,
+  listUsersTool,
   runCmdTool,
   setWorkspaceTool
 ];
