@@ -5,19 +5,12 @@ import {
   formatSkillNotFound,
   loadSkill,
   parseSkillInput,
-  type ParsedSkillInput
+  type ParsedSkillInput,
+  type Skill,
+  type SkillMeta
 } from '@code-agent-lite/tools';
 
-export type SkillMeta = {
-  name: string;
-  description: string;
-  dirName: string;
-};
-
-export type Skill = SkillMeta & {
-  body: string;
-  path: string;
-};
+export type {Skill, SkillMeta};
 
 export type SkillRegistry = {
   parseInput(input: string): ParsedSkillInput;

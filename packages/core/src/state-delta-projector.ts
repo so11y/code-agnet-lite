@@ -37,12 +37,3 @@ export function flushStateDelta(
   addNote(formatStateDelta(projector.deltaStep, delta, state));
   projector.lastInjected = next;
 }
-
-/** @deprecated 使用 flushStateDelta */
-export class StateDeltaProjector {
-  private readonly state = createStateDeltaProjectorState();
-
-  flush(state: SessionState, turnOps: TurnOperations, addNote: (content: string) => void): void {
-    flushStateDelta(this.state, state, turnOps, addNote);
-  }
-}

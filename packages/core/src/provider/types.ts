@@ -7,18 +7,15 @@ import type {CursorSdkTokenUsage} from './token-usage.js';
 
 export type {AgentProviderKind};
 
-export type LlmCallOptions = LlmOptions;
-export type ProviderLlmStreamOptions = LlmStreamOptions;
-
 /** OpenAI 兼容的 chat 后端，供 router / planner / ReAct 使用 */
 export interface LlmProvider {
   readonly kind: Extract<AgentProviderKind, 'openai'>;
   streamWithTools(
     messages: AgentMessage[],
-    options: ProviderLlmStreamOptions
+    options: LlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam>;
-  chatWithTools(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion>;
-  plainChat(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion>;
+  chatWithTools(messages: AgentMessage[], options?: LlmOptions): Promise<ChatCompletion>;
+  plainChat(messages: AgentMessage[], options?: LlmOptions): Promise<ChatCompletion>;
 }
 
 export type CursorAgentHandle = {

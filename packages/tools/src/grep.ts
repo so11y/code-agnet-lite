@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {executeShellCommand, formatCommandOutput, runCommand, throwIfAborted, truncate} from '@code-agent-lite/shared';
+import {executeShellCommand, formatCommandOutput, runCommand, truncate} from '@code-agent-lite/shared';
 import {createTool, RG_IGNORE_GLOBS} from './common.js';
 import {runArgvCommand} from './shell.js';
 

@@ -29,7 +29,7 @@ const TURN_TOOL_TRACKS: Record<string, TurnToolTrack> = {
 };
 
 export class TurnLedger {
-  readonly state: SessionState = SessionState.create();
+  readonly state: SessionState = new SessionState();
   private turnUserInput = '';
   private turnOps: TurnOperations = createEmptyTurnOperations();
 

@@ -11,7 +11,7 @@ import {
 } from '@code-agent-lite/platform';
 import type {AgentMessage, TokenUsage} from '../session-types.js';
 import {normalizeOpenAiUsage} from './token-usage.js';
-import type {LlmCallOptions, LlmProvider, ProviderLlmStreamOptions} from './types.js';
+import type {LlmOptions, LlmProvider, LlmStreamOptions} from './types.js';
 
 const DEFAULT_MODEL = '';
 
@@ -28,7 +28,7 @@ function readReasoningContent(message: unknown): string | undefined {
   return typeof reasoning === 'string' && reasoning.trim() ? reasoning : undefined;
 }
 
-function emitPlainReasoning(session: LlmCallOptions['session'], message: unknown) {
+function emitPlainReasoning(session: LlmOptions['session'], message: unknown) {
   const reasoning = readReasoningContent(message);
   if (!reasoning || !session) {
     return;
@@ -50,14 +50,14 @@ function createClient() {
   return sharedClient;
 }
 
-function resolveTools(session: LlmCallOptions['session']): readonly AgentTool[] {
+function resolveTools(session: LlmOptions['session']): readonly AgentTool[] {
   return session ? session.toolRegistry.tools : createDefaultToolRegistry().tools;
 }
 
 export class OpenAiLlmProvider implements LlmProvider {
   readonly kind = 'openai' as const;
 
-  private createChatCompletion(messages: AgentMessage[], withTools: boolean, options?: LlmCallOptions) {
+  private createChatCompletion(messages: AgentMessage[], withTools: boolean, options?: LlmOptions) {
     const thinking = thinkingExtraBody();
     const toolList = resolveTools(options?.session);
 
@@ -77,7 +77,7 @@ export class OpenAiLlmProvider implements LlmProvider {
   private async completeChat(
     messages: AgentMessage[],
     withTools: boolean,
-    options?: LlmCallOptions
+    options?: LlmOptions
   ): Promise<ChatCompletion> {
     const response = await this.createChatCompletion(messages, withTools, options);
     const usage = normalizeOpenAiUsage(response.usage);
@@ -88,17 +88,17 @@ export class OpenAiLlmProvider implements LlmProvider {
     return response;
   }
 
-  async chatWithTools(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
+  async chatWithTools(messages: AgentMessage[], options?: LlmOptions): Promise<ChatCompletion> {
     return this.completeChat(messages, true, options);
   }
 
-  async plainChat(messages: AgentMessage[], options?: LlmCallOptions): Promise<ChatCompletion> {
+  async plainChat(messages: AgentMessage[], options?: LlmOptions): Promise<ChatCompletion> {
     return this.completeChat(messages, false, options);
   }
 
   async streamWithTools(
     messages: AgentMessage[],
-    options: ProviderLlmStreamOptions
+    options: LlmStreamOptions
   ): Promise<ChatCompletionAssistantMessageParam> {
     const thinking = thinkingExtraBody();
     const toolList = resolveTools(options.session);

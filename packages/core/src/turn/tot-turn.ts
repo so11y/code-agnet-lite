@@ -1,7 +1,8 @@
 import {isEmpty} from 'lodash-es';
 import type {Review} from '../planner-schemas.js';
 import {llmPlan, llmReplan, updateStateFromRun} from '../planner.js';
-import type {AgentRunResult, ReActAgent} from '../react-agent.js';
+import type {CodeAgent} from '../code-agent.js';
+import type {AgentRunResult} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
 
 export const MAX_TOT_RETRIES = 3;
@@ -23,7 +24,7 @@ export function shouldContinueTot(result: TotTurnResult): boolean {
 }
 
 /** 单次 ToT：规划（若无假设）→ ReAct → 复盘 */
-export async function runTotTurn(session: AgentSession, agent: ReActAgent): Promise<TotTurnResult> {
+export async function runTotTurn(session: AgentSession, agent: CodeAgent): Promise<TotTurnResult> {
   session.throwIfAborted();
 
   if (isEmpty(session.state.hypotheses)) {
@@ -61,7 +62,7 @@ export async function runTotTurn(session: AgentSession, agent: ReActAgent): Prom
  */
 export async function runTotTurnWithRetries(
   session: AgentSession,
-  agent: ReActAgent,
+  agent: CodeAgent,
   maxRetries = MAX_TOT_RETRIES
 ): Promise<TotTurnResult> {
   let last: TotTurnResult | undefined;

@@ -1,4 +1,3 @@
-import {throwIfAborted} from '@code-agent-lite/shared';
 import type {AgentTool} from '@code-agent-lite/tools';
 import type {
   ChatCompletionAssistantMessageParam,
@@ -30,7 +29,7 @@ export class CursorCodeAgent extends ReActAgent {
     let recordedUsageFromStream = false;
 
     for await (const event of run.stream()) {
-      throwIfAborted(this.session.turnSignal());
+      this.session.throwIfAborted();
       const message = event as CursorSdkMessage;
 
       if (!assistantStreamStarted && shouldStartAssistantStream(message)) {
@@ -46,7 +45,7 @@ export class CursorCodeAgent extends ReActAgent {
       }
     }
 
-    throwIfAborted(this.session.turnSignal());
+    this.session.throwIfAborted();
 
     const result = await run.wait();
 

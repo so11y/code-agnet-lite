@@ -1,14 +1,13 @@
-import {z} from 'zod';
 import {joinSections} from '@code-agent-lite/shared';
 import {llmReplan} from '../planner.js';
 import {VERIFY_GATE_PROMPT} from '../prompt.js';
-import type {ReActAgent} from '../react-agent.js';
+import type {CodeAgent} from '../code-agent.js';
 import type {AgentSession} from '../session.js';
 import type {ReasoningMode, TurnReview} from '../session-types.js';
 import {executeReasoningMode} from '../turn/execute-mode.js';
 import {callStructuredLlm} from '../structured-llm-caller.js';
 import {createTaskOutput, type TaskNode, type TaskOutput} from '../dag/types.js';
-import {createEmptyTurnOperations} from '../types/operations.js';
+import {createEmptyTurnOperations, verifyGateSchema} from '../types/operations.js';
 import {discoverVerifyCommands} from './verify-discovery.js';
 import {
   buildFinalFailureReport,
@@ -23,11 +22,6 @@ import {
   MAX_REPLAN_ATTEMPTS,
   type VerifyResult
 } from './types.js';
-
-const verifyGateSchema = z.object({
-  shouldVerify: z.boolean(),
-  reason: z.string()
-});
 
 export class VerifyCoordinator {
   constructor(private readonly cwd: string) {}
@@ -88,7 +82,7 @@ export class VerifyCoordinator {
   }
 
   async runFixLoop(
-    agent: ReActAgent,
+    agent: CodeAgent,
     session: AgentSession,
     review: TurnReview,
     reasoningMode?: ReasoningMode
@@ -164,7 +158,7 @@ export class VerifyCoordinator {
 
   private async runFixAttempt(
     session: AgentSession,
-    agent: ReActAgent,
+    agent: CodeAgent,
     reasoningMode?: ReasoningMode
   ): Promise<void> {
     const mode = reasoningMode === 'tot' ? 'tot' : 'react';
@@ -177,7 +171,7 @@ export async function judgeShouldVerify(session: AgentSession): Promise<TurnRevi
 }
 
 export async function runVerifyAndFixLoop(
-  agent: ReActAgent,
+  agent: CodeAgent,
   session: AgentSession,
   review: TurnReview,
   reasoningMode?: ReasoningMode

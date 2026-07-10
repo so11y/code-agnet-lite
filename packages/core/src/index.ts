@@ -5,15 +5,9 @@ export {createDefaultSkillRegistry, type Skill, type SkillMeta, type SkillRegist
 export {AgentSession} from './session.js';
 export * from './state-ai-view.js';
 export {
-  ReActAgent,
-  type AgentRunResult
-} from './react-agent.js';
-export {
   DefaultCodeAgent,
   type CodeAgent,
-  type ToolLoopAgent,
-  supportsToolLoop,
-  isReActAgent
+  supportsToolLoop
 } from './code-agent.js';
 export {openAiLlm} from './provider/openai-provider.js';
 export * from './openai-message.js';
@@ -33,25 +27,19 @@ export {
 export {
   callStructuredLlm,
   callStructuredLlmOrThrow,
-  callStructuredLlmWithHandler,
-  StructuredLlmCaller
+  callStructuredLlmWithHandler
 } from './structured-llm-caller.js';
 export {
   createStateDeltaProjectorState,
   flushStateDelta,
-  StateDeltaProjector,
   type StateDeltaProjectorState
 } from './state-delta-projector.js';
 export {
   PluginDriver,
-  dagPlugin,
   defaultPlugins,
   modePlugin,
   preparePlugin,
-  reactPlugin,
   routerPlugin,
-  skillPlugin,
-  totPlugin,
   verifyPlugin,
   type AgentPlugin,
   type PluginTurnContext
@@ -76,14 +64,3 @@ export {
   type AgentProvider,
   type AgentProviderKind
 } from './provider/index.js';
-
-import {openAiLlm} from './provider/openai-provider.js';
-
-/** @deprecated 使用 openAiLlm.chatWithTools */
-export const callLlm = openAiLlm.chatWithTools.bind(openAiLlm);
-
-/** @deprecated 使用 openAiLlm.plainChat */
-export const callPlainLlm = openAiLlm.plainChat.bind(openAiLlm);
-
-/** @deprecated 使用 openAiLlm.streamWithTools */
-export const callLlmStream = openAiLlm.streamWithTools.bind(openAiLlm);

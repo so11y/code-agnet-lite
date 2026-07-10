@@ -62,15 +62,3 @@ export function verifyPlugin(): AgentPlugin {
 export function defaultPlugins(): AgentPlugin[] {
   return [preparePlugin(), routerPlugin(), agentProviders.plugin(), modePlugin(), verifyPlugin()];
 }
-
-/** @deprecated 使用 preparePlugin */
-export const skillPlugin = preparePlugin;
-
-/** @deprecated 合并进 modePlugin */
-export const reactPlugin = modePlugin;
-
-/** @deprecated 合并进 modePlugin */
-export const totPlugin = modePlugin;
-
-/** @deprecated 合并进 modePlugin */
-export const dagPlugin = modePlugin;

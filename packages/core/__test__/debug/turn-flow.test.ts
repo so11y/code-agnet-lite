@@ -48,7 +48,7 @@ import {AgentSession} from '../../src/session.js';
 function createDebugSession() {
   const events: AgentEvent[] = [];
 
-  const session = AgentSession.create({
+  const session = new AgentSession({
     cwd: process.cwd(),
     provider: 'openai',
     onEvent: (event) => events.push(event)

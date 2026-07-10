@@ -115,7 +115,7 @@ export function createWorkerSession(
   parentOptions: AgentSessionOptions,
   workerMaxSteps: number
 ): AgentSession {
-  const session = AgentSession.create({
+  const session = new AgentSession({
     cwd: parentOptions.cwd,
     maxSteps: workerMaxSteps,
     provider: parentOptions.provider,

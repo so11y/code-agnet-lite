@@ -1,3 +1,4 @@
+import {filter, find} from 'lodash-es';
 import type {AgentSession} from '../session.js';
 import {formatError, joinSections} from '@code-agent-lite/shared';
 import {runDag} from './dag-scheduler.js';
@@ -9,7 +10,7 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
 
   try {
     const graph = await llmPlanDag(input, session);
-    const blackboard = Blackboard.create();
+    const blackboard = new Blackboard();
 
     await runDag(graph, {
       session,
@@ -17,9 +18,10 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
       userInput: input
     });
 
-    const mergeNode = [...graph.nodes.values()].find((node) => node.kind === 'merge');
-    const failed = [...graph.nodes.values()].filter((node) => node.status === 'failed');
-    const skipped = [...graph.nodes.values()].filter((node) => node.status === 'skipped');
+    const nodes = [...graph.nodes.values()];
+    const mergeNode = find(nodes, {kind: 'merge'});
+    const failed = filter(nodes, {status: 'failed'});
+    const skipped = filter(nodes, {status: 'skipped'});
 
     if (mergeNode?.status === 'done' && mergeNode.output?.summary) {
       session.mergeTurnOperations({

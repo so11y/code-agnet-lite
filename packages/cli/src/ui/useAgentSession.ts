@@ -19,7 +19,7 @@ export function useAgentSession({onEvent}: Options) {
 
   const ensureSession = useCallback((cwd: string) => {
     if (!sessionRef.current) {
-      sessionRef.current = AgentSession.create({
+      sessionRef.current = new AgentSession({
         cwd,
         provider: getAgentProviderKind(),
         onEvent: (event) => onEventRef.current(event)

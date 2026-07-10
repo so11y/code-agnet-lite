@@ -1,3 +1,5 @@
+import {z} from 'zod';
+
 export type TurnOperations = {
   writtenFiles: string[];
   deletedFiles: string[];
@@ -14,10 +16,12 @@ export type TurnSummary = {
   assistantText: string;
 };
 
-export type VerifyGate = {
-  shouldVerify: boolean;
-  reason: string;
-};
+export const verifyGateSchema = z.object({
+  shouldVerify: z.boolean(),
+  reason: z.string()
+});
+
+export type VerifyGate = z.infer<typeof verifyGateSchema>;
 
 export type TurnReview = TurnSummary & {
   gate: VerifyGate;

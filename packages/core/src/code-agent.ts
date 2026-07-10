@@ -30,6 +30,3 @@ export type ToolLoopAgent = ReActAgent;
 export function supportsToolLoop(agent: CodeAgent): agent is ToolLoopAgent {
   return agent instanceof ReActAgent && !(agent instanceof CursorCodeAgent);
 }
-
-/** @deprecated 使用 supportsToolLoop */
-export const isReActAgent = supportsToolLoop;

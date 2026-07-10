@@ -1,5 +1,4 @@
 import {throwIfAborted} from '@code-agent-lite/shared';
-
 import type {AgentRule, RuleContextState} from '@code-agent-lite/tools';
 
 import type {Skill} from './skill-registry.js';
@@ -89,14 +88,6 @@ export class AgentSession {
     this.conversation_ = new ConversationStore(options.cwd, this.events_);
 
     this.ledger_ = new TurnLedger();
-
-  }
-
-
-
-  static create(options: AgentSessionOptions): AgentSession {
-
-    return new AgentSession(options);
 
   }
 

@@ -1,6 +1,5 @@
 import {supportsToolLoop, type CodeAgent} from '../code-agent.js';
 import {runDagTurn} from '../dag/orchestrator.js';
-import type {ReActAgent} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
 import type {ReasoningMode} from '../session-types.js';
 import {runTotTurnWithRetries} from './tot-turn.js';
@@ -33,7 +32,7 @@ export async function executeReasoningMode(
   }
 
   if (mode === 'react') {
-    await (agent as ReActAgent).run();
+    await agent.run();
     return;
   }
 
@@ -44,6 +43,6 @@ export async function executeReasoningMode(
     }
 
     session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
-    await (agent as ReActAgent).run();
+    await agent.run();
   }
 }

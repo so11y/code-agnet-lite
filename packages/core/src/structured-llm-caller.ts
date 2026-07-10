@@ -46,10 +46,3 @@ export async function callStructuredLlmWithHandler<T extends z.ZodTypeAny>(optio
     return options.onParseError(response);
   }
 }
-
-/** @deprecated 使用 callStructuredLlm 等函数 */
-export const StructuredLlmCaller = {
-  call: callStructuredLlm,
-  callOrThrow: callStructuredLlmOrThrow,
-  callWithHandler: callStructuredLlmWithHandler
-};

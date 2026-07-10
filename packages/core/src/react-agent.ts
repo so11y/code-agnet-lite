@@ -1,7 +1,7 @@
 import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall} from 'openai/resources/chat/completions';
 import {parseToolArgs} from './openai-message.js';
 import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
-import {normalizeToolResult, truncate, TurnAbortedError, withTimeout, formatError} from '@code-agent-lite/shared';
+import {formatError, normalizeToolResult, truncate, TurnAbortedError, withTimeout} from '@code-agent-lite/shared';
 import {AgentSession} from './session.js';
 import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';

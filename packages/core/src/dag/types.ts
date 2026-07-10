@@ -55,18 +55,11 @@ export class Blackboard extends BaseMemory {
     });
   }
 
-  static create(): Blackboard {
-    return new Blackboard();
-  }
 }
-
-export type SerializedTaskNode = Omit<TaskNode, 'output'> & {
-  output?: TaskOutput;
-};
 
 export type SerializedTaskGraph = {
   summary?: string;
-  nodes: SerializedTaskNode[];
+  nodes: TaskNode[];
   edges: TaskEdge[];
 };
 

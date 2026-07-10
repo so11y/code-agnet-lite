@@ -56,8 +56,4 @@ export class SessionState extends BaseMemory {
   rejected: string[] = [];
   noProgress = 0;
   confidence = 0;
-
-  static create(): SessionState {
-    return new SessionState();
-  }
 }
