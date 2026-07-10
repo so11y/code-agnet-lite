@@ -2,6 +2,7 @@ import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall}
 import {parseToolArgs} from './openai-message.js';
 import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
 import {formatError, normalizeToolResult, truncate, TurnAbortedError, withTimeout} from '@code-agent-lite/shared';
+import {formatSkillLoadResult} from '@code-agent-lite/tools';
 import {AgentSession} from './session.js';
 import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';
@@ -129,7 +130,15 @@ export abstract class ReActAgent {
           tool.execute(parsed.data, {
             cwd: this.session.cwd,
             setCwd: (cwd) => this.session.setWorkspace(cwd),
-            signal: this.session.turnSignal()
+            signal: this.session.turnSignal(),
+            ensureSkillLoaded: async (name) => {
+              const outcome = await this.session.skills.ensureLoaded(this.session.cwd, name);
+              if (!outcome) {
+                return this.session.skills.registry.formatNotFound(name);
+              }
+
+              return formatSkillLoadResult(outcome.skill.name, outcome.injected);
+            }
           }),
           this.toolTimeoutMs(),
           this.session.turnSignal()

@@ -4,14 +4,14 @@ export const SYSTEM_PROMPT = `你是一个代码 Agent。
 
 规则：
 1. 在检查项目之前，不要猜测问题原因。
-2. 当用户要求修改代码或修复 bug 时，先搜索代码；查看变更优先使用 git_diff。
-3. 编辑文件之前，必须阅读相关文件。
-4. 需要确认行为时，运行命令进行验证。
-5. 修改或删除文件之后，验证结果。
-6. 如果无法确认某件事，要明确说明。
-7. 如果主上下文中包含 ToT 探索计划，把它当作假设和预测，而不是事实；执行前必须用读取文件、搜索代码或运行命令验证关键判断。
-8. 删除单个文件时使用 delete_file，不要用 shell 命令删文件。
-9. 上下文中可能有 Skill Catalog（仅 name/description）。任务匹配时用 load_skill 加载正文；用户也可用 /skill <name> 直接加载全文。
+2. 若上下文含 [Skill Catalog]：执行用户任务、调用其他工具之前，须对照 Catalog 的 description 判断是否有匹配 Skill；有则先 load_skill 激活。已注入的 [Skill: ...] 正文须遵守。用户可用 /skill <name> 强制指定。
+3. 当用户要求修改代码或修复 bug 时，先搜索代码；查看变更优先使用 git_diff。
+4. 编辑文件之前，必须阅读相关文件。
+5. 需要确认行为时，运行命令进行验证。
+6. 修改或删除文件之后，验证结果。
+7. 如果无法确认某件事，要明确说明。
+8. 如果主上下文中包含 ToT 探索计划，把它当作假设和预测，而不是事实；执行前必须用读取文件、搜索代码或运行命令验证关键判断。
+9. 删除单个文件时使用 delete_file，不要用 shell 命令删文件。
 
 使用可用工具检查和修改当前本地工作区。文件路径应相对于当前工作区。解释保持简洁。`;
 
@@ -115,6 +115,23 @@ export function formatWorkspaceContext(cwd: string): string {
 
 export function formatUserRequest(input: string): string {
   return `用户请求：\n${input}`;
+}
+
+export function buildCursorTurnPrompt(
+  userInput: string,
+  options: {catalog?: string | null; skillNotes: string[]}
+): string {
+  const blocks: string[] = [];
+
+  if (options.catalog) {
+    blocks.push(
+      options.catalog,
+      '上表为 Skill 索引（仅 name/description）。执行用户任务前须对照 description，匹配则先按该 Skill 指引执行（可用 /skill-name）。'
+    );
+  }
+
+  blocks.push(...options.skillNotes, formatUserRequest(userInput));
+  return blocks.join('\n\n');
 }
 
 export function formatTurnUserMessage(cwd: string, input: string): string {

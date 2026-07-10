@@ -15,6 +15,7 @@ import {
 
 import {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
 
+import {createDefaultSkillRegistry} from './skill-registry.js';
 import {Skills} from './skills/skills.js';
 
 import {ConversationStore} from './session/conversation-store.js';
@@ -65,7 +66,7 @@ export class AgentSession {
 
     this.conversation = new ConversationStore(options.cwd, this.events);
 
-    this.skills = Skills.create(this.conversation, options.skills);
+    this.skills = new Skills(options.skills ?? createDefaultSkillRegistry(), this.conversation);
 
     this.ledger = new TurnLedger();
 

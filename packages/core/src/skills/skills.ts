@@ -1,36 +1,35 @@
 import type {ConversationStore} from '../session/conversation-store.js';
-import {
-  createDefaultSkillRegistry,
-  type Skill,
-  type SkillRegistry
-} from '../skill-registry.js';
+import type {Skill, SkillMeta, SkillRegistry} from '../skill-registry.js';
+
+export type EnsureLoadedResult = {
+  skill: Skill;
+  injected: boolean;
+};
 
 export class Skills {
   private readonly loaded_ = new Set<string>();
+  private catalogItems_: SkillMeta[] = [];
 
   constructor(
-    private readonly registry: SkillRegistry,
+    readonly registry: SkillRegistry,
     private readonly conversation: ConversationStore
   ) {}
 
-  static create(conversation: ConversationStore, registry?: SkillRegistry): Skills {
-    return new Skills(registry ?? createDefaultSkillRegistry(), conversation);
+  listLoaded(): string[] {
+    return [...this.loaded_];
   }
 
-  parseInput(input: string) {
-    return this.registry.parseInput(input);
+  isLoaded(name: string): boolean {
+    const query = name.trim().toLowerCase();
+    return [...this.loaded_].some((loaded) => loaded.toLowerCase() === query);
   }
 
-  load(cwd: string, name: string) {
-    return this.registry.load(cwd, name);
-  }
-
-  formatNotFound(name: string) {
-    return this.registry.formatNotFound(name);
+  listCatalog(): SkillMeta[] {
+    return this.catalogItems_;
   }
 
   inject(skill: Skill): boolean {
-    if (this.loaded_.has(skill.name)) {
+    if (this.isLoaded(skill.name)) {
       return false;
     }
 
@@ -39,12 +38,23 @@ export class Skills {
     return true;
   }
 
+  async ensureLoaded(cwd: string, name: string): Promise<EnsureLoadedResult | undefined> {
+    const skill = await this.registry.load(cwd, name);
+    if (!skill) {
+      return undefined;
+    }
+
+    const injected = this.inject(skill);
+    return {skill, injected};
+  }
+
   async mountCatalog(cwd: string): Promise<void> {
     if (this.conversation.isSkillCatalogSynced(cwd)) {
       return;
     }
 
     const items = await this.registry.discover(cwd);
+    this.catalogItems_ = items;
     const catalog = this.registry.formatCatalog(items);
 
     if (catalog) {
@@ -58,5 +68,6 @@ export class Skills {
 
   invalidateCatalog(): void {
     this.conversation.invalidateSkillCatalog();
+    this.catalogItems_ = [];
   }
 }

@@ -5,6 +5,15 @@ export function formatSkillNotFound(name: string): string {
   return `未找到 Skill：${name}。可用 list_skills 查看。`;
 }
 
+export const SKILL_CATALOG_ACTIVATE_HINT =
+  '执行用户任务、调用其他工具之前，须对照 Catalog 的 description；有匹配 Skill 则先调用 load_skill 激活。';
+
+export function formatSkillLoadResult(name: string, injected: boolean): string {
+  return injected
+    ? `已加载 Skill：${name}`
+    : `Skill「${name}」已加载，无需重复。`;
+}
+
 export function formatSkillForPrompt(skill: Skill): string {
   const lines = [`[Skill: ${skill.name}]`];
 
@@ -28,9 +37,7 @@ export function formatSkillCatalog(skills: SkillMeta[]): string | null {
     (skill) => `---\nname: ${skill.name}\ndescription: ${skill.description || '（无描述）'}\n---`
   );
 
-  return ['[Skill Catalog]', '任务匹配某 Skill 的 description 时，用 load_skill 加载正文。', '', ...blocks].join(
-    '\n'
-  );
+  return ['[Skill Catalog]', `以下为 Skill 索引（仅 name/description）。${SKILL_CATALOG_ACTIVATE_HINT}`, '', ...blocks].join('\n');
 }
 
 export function formatSkillList(skills: SkillMeta[], cwd: string): string {

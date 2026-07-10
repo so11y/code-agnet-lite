@@ -15,4 +15,5 @@ export type ToolContext = {
   cwd: string;
   setCwd(cwd: string): void | Promise<void>;
   signal?: AbortSignal;
+  ensureSkillLoaded?(name: string): Promise<string>;
 };

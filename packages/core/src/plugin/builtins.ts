@@ -61,5 +61,12 @@ export function verifyPlugin(): AgentPlugin {
 }
 
 export function defaultPlugins(): AgentPlugin[] {
-  return [skillCatalogPlugin(), preparePlugin(), routerPlugin(), agentProviders.plugin(), modePlugin(), verifyPlugin()];
+  return [
+    skillCatalogPlugin(),
+    preparePlugin(),
+    routerPlugin(),
+    agentProviders.plugin(),
+    modePlugin(),
+    verifyPlugin()
+  ];
 }

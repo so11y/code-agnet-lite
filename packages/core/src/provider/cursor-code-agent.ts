@@ -1,8 +1,11 @@
 import type {AgentTool} from '@code-agent-lite/tools';
+import {formatSkillCatalog} from '@code-agent-lite/tools';
 import type {
   ChatCompletionAssistantMessageParam,
   ChatCompletionMessageToolCall
 } from 'openai/resources/chat/completions';
+import {buildCursorTurnPrompt} from '../prompt.js';
+import {messageText} from '../openai-message.js';
 import type {AgentSession} from '../session.js';
 import type {AgentMessage, LlmStreamOptions, ToolCallItem} from '../session-types.js';
 import {ReActAgent, type AgentRunResult} from '../react-agent.js';
@@ -27,7 +30,11 @@ export class CursorCodeAgent extends ReActAgent {
     const userInput = this.session.ledger.collectTurnSummary(
       this.session.conversation.extractLastAssistantText()
     ).userInput;
-    const run = await agent.send(userInput);
+    const prompt = buildCursorTurnPrompt(userInput, {
+      catalog: formatSkillCatalog(this.session.skills.listCatalog()),
+      skillNotes: collectSkillNotes(this.session.conversation.messages)
+    });
+    const run = await agent.send(prompt);
     let recordedUsageFromStream = false;
 
     for await (const event of run.stream()) {
@@ -106,4 +113,21 @@ export class CursorCodeAgent extends ReActAgent {
   protected findTool(_name: string): AgentTool | undefined {
     return undefined;
   }
+}
+
+function collectSkillNotes(messages: AgentMessage[]): string[] {
+  const notes: string[] = [];
+
+  for (const message of messages) {
+    if (message.role !== 'system') {
+      continue;
+    }
+
+    const content = messageText(message.content);
+    if (content?.startsWith('[Skill:')) {
+      notes.push(content);
+    }
+  }
+
+  return notes;
 }

@@ -1,19 +1,18 @@
 import {z} from 'zod';
 import {createTool} from './common.js';
-import {formatSkillForPrompt, formatSkillNotFound, loadSkill} from './skills/index.js';
+import {SKILL_CATALOG_ACTIVATE_HINT} from './skills/format.js';
 
 export const loadSkillTool = createTool({
   name: 'load_skill',
-  description: '加载 Skill 完整指引。当 Skill Catalog 中某个 description 与当前任务匹配时使用。',
+  description: `激活 Skill 并将指引注入上下文。${SKILL_CATALOG_ACTIVATE_HINT} 已激活则返回提示。`,
   schema: z.object({
     name: z.string().describe('Skill 名称或目录名。')
   }),
   async execute(input, context) {
-    const skill = await loadSkill(context.cwd, input.name);
-    if (!skill) {
-      return formatSkillNotFound(input.name);
+    if (!context.ensureSkillLoaded) {
+      throw new Error('load_skill 需要在 Agent 上下文中执行');
     }
 
-    return formatSkillForPrompt(skill);
+    return context.ensureSkillLoaded(input.name);
   }
 });

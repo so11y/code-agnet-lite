@@ -1,18 +1,21 @@
 import type {AgentSession} from '../session.js';
-import {resolveAndInjectTurnSkills} from '../skills/apply-turn-skills.js';
+import {formatSkillLoadResult} from '@code-agent-lite/tools';
 
 export async function prepareTurn(session: AgentSession, input: string, cwd: string): Promise<string> {
   await session.ensureWorkspace(cwd);
 
-  const {cleanedInput, loaded, missingSkill} = await resolveAndInjectTurnSkills(session, input, cwd);
+  const parsed = session.skills.registry.parseInput(input);
 
-  if (missingSkill) {
-    session.events.say('system', session.skills.formatNotFound(missingSkill));
-  } else if (loaded.length) {
-    session.events.say('system', `已加载 Skill：${loaded.map((skill) => skill.name).join(', ')}`);
+  if (parsed.skillName) {
+    const outcome = await session.skills.ensureLoaded(cwd, parsed.skillName);
+    if (!outcome) {
+      session.events.say('system', session.skills.registry.formatNotFound(parsed.skillName));
+    } else if (outcome.injected) {
+      session.events.say('system', formatSkillLoadResult(outcome.skill.name, true));
+    }
   }
 
-  session.ledger.beginTurn(cleanedInput);
-  session.conversation.appendUser(cleanedInput, {emit: false});
-  return cleanedInput;
+  session.ledger.beginTurn(parsed.cleanedInput);
+  session.conversation.appendUser(parsed.cleanedInput, {emit: false});
+  return parsed.cleanedInput;
 }
