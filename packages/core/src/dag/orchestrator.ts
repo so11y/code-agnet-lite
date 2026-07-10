@@ -24,7 +24,7 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
     const skipped = filter(nodes, {status: 'skipped'});
 
     if (mergeNode?.status === 'done' && mergeNode.output?.summary) {
-      session.mergeTurnOperations({
+      session.ledger.mergeTurnOperations({
         writtenFiles: [...blackboard.writtenFiles],
         deletedFiles: [...blackboard.deletedFiles],
         executedCommands: [...blackboard.executedCommands]

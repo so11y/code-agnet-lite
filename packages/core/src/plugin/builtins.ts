@@ -3,6 +3,7 @@ import {routeReasoningMode} from '../router.js';
 import {executeReasoningMode} from '../turn/execute-mode.js';
 import {prepareTurn} from '../turn/prepare-turn.js';
 import {runPostTurnVerify} from '../turn/post-turn.js';
+import {skillCatalogPlugin} from './skill-catalog-plugin.js';
 import type {AgentPlugin} from './types.js';
 
 export function preparePlugin(): AgentPlugin {
@@ -60,5 +61,5 @@ export function verifyPlugin(): AgentPlugin {
 }
 
 export function defaultPlugins(): AgentPlugin[] {
-  return [preparePlugin(), routerPlugin(), agentProviders.plugin(), modePlugin(), verifyPlugin()];
+  return [skillCatalogPlugin(), preparePlugin(), routerPlugin(), agentProviders.plugin(), modePlugin(), verifyPlugin()];
 }

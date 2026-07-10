@@ -123,15 +123,15 @@ export function createWorkerSession(
     onEvent: createWorkerOnEvent(parentOptions, node)
   });
 
-  session.messages.splice(0, session.messages.length);
-  session.messages.push(
+  session.conversation.messages.splice(0, session.conversation.messages.length);
+  session.conversation.messages.push(
     ...createWorkspaceSystemMessages(parentOptions.cwd, `${SYSTEM_PROMPT}\n\n${WORKER_ROLE_PROMPT}`),
     {role: 'system', content: `Worker 节点：${node.id}（${node.kind}）`}
   );
 
   const upstream = buildUpstreamContext(node, blackboard);
   if (upstream) {
-    session.messages.push({role: 'system', content: upstream});
+    session.conversation.messages.push({role: 'system', content: upstream});
   }
 
   return session;
@@ -155,7 +155,7 @@ export async function runWorkerNode(
     node.id
   );
 
-  workerSession.appendUser(`[本节点目标]\n${node.goal}`);
+  workerSession.conversation.appendUser(`[本节点目标]\n${node.goal}`);
   try {
     const result = await agent.run();
 
@@ -166,16 +166,16 @@ export async function runWorkerNode(
     agent.dynamicReleases.forEach((release) => release());
   }
 
-  const summary = workerSession.extractLastAssistantText();
+  const summary = workerSession.conversation.extractLastAssistantText();
   if (!summary.trim()) {
     throw new Error(`Worker ${node.id} 未返回有效摘要`);
   }
 
   return createTaskOutput({
     summary,
-    operations: workerSession.refreshOperations(),
-    facts: [...workerSession.state.facts],
-    visitedFiles: [...workerSession.state.visitedFiles],
-    searchedTerms: [...workerSession.state.searchedTerms]
+    operations: workerSession.ledger.refreshOperations(),
+    facts: [...workerSession.ledger.state.facts],
+    visitedFiles: [...workerSession.ledger.state.visitedFiles],
+    searchedTerms: [...workerSession.ledger.state.searchedTerms]
   });
 }

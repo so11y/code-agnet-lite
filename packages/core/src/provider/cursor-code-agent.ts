@@ -24,7 +24,9 @@ export class CursorCodeAgent extends ReActAgent {
     const completedToolCalls: ChatCompletionMessageToolCall[] = [];
     let assistantStreamStarted = false;
 
-    const userInput = this.session.collectTurnSummary().userInput;
+    const userInput = this.session.ledger.collectTurnSummary(
+      this.session.conversation.extractLastAssistantText()
+    ).userInput;
     const run = await agent.send(userInput);
     let recordedUsageFromStream = false;
 
@@ -61,9 +63,9 @@ export class CursorCodeAgent extends ReActAgent {
     const toolCalls = completedToolCalls.length ? completedToolCalls : undefined;
 
     if (assistantStreamStarted) {
-      this.session.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, true);
+      this.session.conversation.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, true);
     } else if (text || toolCalls) {
-      this.session.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, false);
+      this.session.conversation.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, false);
     } else if (result.status !== 'error') {
       this.session.events.say('assistant', '（Cursor Agent 未返回文本）');
     }
@@ -76,7 +78,7 @@ export class CursorCodeAgent extends ReActAgent {
       startTool: (call) => this.session.events.startTool(call),
       finishTool: (id, output, options) => {
         if (options?.toolName) {
-          this.session.recordToolCall(options.toolName, options.toolInput ?? {});
+          this.session.ledger.recordToolCall(options.toolName, options.toolInput ?? {});
           completedToolCalls.push({
             id,
             type: 'function',
@@ -87,7 +89,7 @@ export class CursorCodeAgent extends ReActAgent {
           });
         }
 
-        this.session.finishTool(id, output, options);
+        this.session.conversation.finishTool(id, output, options);
       },
       appendAssistantDelta: (text) => this.session.events.appendAssistantDelta(text),
       recordTokenUsage: (usage) => this.session.events.recordTokenUsage(usage)

@@ -1,6 +1,7 @@
 export * from './async.js';
 export {requireCjs} from './require-cjs.js';
 export * from './command-output.js';
+export * from './enforce-order.js';
 export * from './json-output.js';
 export * from './object.js';
 export * from './path-safe.js';

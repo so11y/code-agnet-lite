@@ -1,53 +1,43 @@
-import {throwIfAborted} from '@code-agent-lite/shared';
-
-import type {Skill} from './skill-registry.js';
-import {createDefaultSkillRegistry, type SkillRegistry} from './skill-registry.js';
-
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
+import { throwIfAborted } from "@code-agent-lite/shared";
 
 import {
-
   createStateDeltaProjectorState,
-
   flushStateDelta,
-
   type StateDeltaProjectorState
-
-} from './state-delta-projector.js';
-
-import type {SessionState} from './agent-memory.js';
+} from "./state-delta-projector.js";
 
 import {
-
   type AgentMessage,
-
   type AgentSessionOptions,
-
   type LlmOptions,
+  type ReasoningMode
+} from "./session-types.js";
 
-  type ReasoningMode,
+import {
+  createDefaultToolRegistry,
+  type ToolRegistry
+} from "./tool-registry.js";
 
-  type TokenUsage,
+import { Skills } from "./skills/skills.js";
 
-  type TurnOperations,
+import { ConversationStore } from "./session/conversation-store.js";
 
-  type TurnSummary
+import { SessionEventBus } from "./session/event-bus.js";
 
-} from './session-types.js';
+import { TurnLedger } from "./session/turn-ledger.js";
 
-import {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
+import { PluginDriver } from "./plugin/driver.js";
 
-import {ConversationStore} from './session/conversation-store.js';
+import { defaultPlugins } from "./plugin/builtins.js";
 
-import {SessionEventBus} from './session/event-bus.js';
+import { createPluginSessionContext, HookStrategy, PluginHook } from "./plugin/types.js";
 
-import {TurnLedger} from './session/turn-ledger.js';
-
-import type {FinishToolOptions} from './session/finish-tool-options.js';
-
-
+export type OpenAgentSessionOptions = Omit<AgentSessionOptions, "plugins"> & {
+  plugins?: AgentSessionOptions["plugins"];
+};
 
 export class AgentSession {
+  static current: AgentSession | null = null;
 
   cwd: string;
 
@@ -55,315 +45,147 @@ export class AgentSession {
 
   readonly toolRegistry: ToolRegistry;
 
-  readonly skillRegistry: SkillRegistry;
+  readonly skills: Skills;
 
-  private readonly events_: SessionEventBus;
+  readonly events: SessionEventBus;
 
-  private readonly conversation_: ConversationStore;
+  readonly conversation: ConversationStore;
 
-  private readonly ledger_: TurnLedger;
+  readonly ledger: TurnLedger;
 
-  private readonly stateProjector_: StateDeltaProjectorState = createStateDeltaProjectorState();
+  private readonly stateProjector_: StateDeltaProjectorState =
+    createStateDeltaProjectorState();
 
   private turnSignal_?: AbortSignal;
 
-  private loadedSkillNames_ = new Set<string>();
-
-
   constructor(readonly options: AgentSessionOptions) {
-
     this.cwd = options.cwd;
 
     this.toolRegistry = options.tools ?? createDefaultToolRegistry();
 
-    this.skillRegistry = options.skills ?? createDefaultSkillRegistry();
+    this.events = new SessionEventBus(options.onEvent);
 
-    this.events_ = new SessionEventBus(options.onEvent);
+    this.conversation = new ConversationStore(options.cwd, this.events);
 
-    this.conversation_ = new ConversationStore(options.cwd, this.events_);
+    this.skills = Skills.create(this.conversation, options.skills);
 
-    this.ledger_ = new TurnLedger();
-
+    this.ledger = new TurnLedger();
   }
 
-
-
-  get messages(): AgentMessage[] {
-
-    return this.conversation_.messages;
-
+  private driver(): PluginDriver {
+    return new PluginDriver(this.options.plugins ?? []);
   }
 
+  static async open(options: AgentSessionOptions): Promise<AgentSession> {
+    const driver = new PluginDriver(options.plugins ?? []);
+    const session = new AgentSession(options);
 
-
-  get state(): SessionState {
-
-    return this.ledger_.state;
-
-  }
-
-
-
-  get tokenUsage(): TokenUsage {
-
-    return this.events_.tokenUsage;
-
-  }
-
-
-
-  get events(): SessionEventBus {
-
-    return this.events_;
-
-  }
-
-
-
-  beginTurn(userInput: string) {
-
-    this.ledger_.beginTurn(userInput);
-
-  }
-
-
-
-  setTurnSignal(signal?: AbortSignal) {
-
-    this.turnSignal_ = signal;
-
-  }
-
-
-
-  turnSignal(): AbortSignal | undefined {
-
-    return this.turnSignal_;
-
-  }
-
-
-
-  throwIfAborted() {
-
-    throwIfAborted(this.turnSignal_);
-
-  }
-
-
-
-  llmOptions(): LlmOptions {
-
-    return {session: this, signal: this.turnSignal_};
-
-  }
-
-
-
-  appendUser(content: string, options?: {emit?: boolean}) {
-
-    this.conversation_.appendUser(content, options);
-
-  }
-
-
-
-  flushStateDelta() {
-
-    flushStateDelta(this.stateProjector_, this.ledger_.state, this.ledger_.refreshOperations(), (content) =>
-
-      this.addSystemNote(content)
-
+    await driver.runHook(
+      PluginHook.SessionReady,
+      HookStrategy.Void,
+      createPluginSessionContext(session)
     );
 
+    return session;
   }
 
-
-
-  buildLlmMessages(): AgentMessage[] {
-
-    this.flushStateDelta();
-
-    return this.messages;
-
-  }
-
-
-
-  applyHypotheses(hypotheses: string[]) {
-
-    this.ledger_.applyHypotheses(hypotheses);
-
-  }
-
-
-
-  rejectHypotheses(hypotheses: string[]) {
-
-    this.ledger_.rejectHypotheses(hypotheses);
-
-  }
-
-
-
-  addFacts(facts: string[]) {
-
-    this.ledger_.addFacts(facts);
-
-  }
-
-
-
-  recordToolCall(name: string, input: unknown) {
-
-    this.ledger_.recordToolCall(name, input);
-
-  }
-
-
-
-  mergeTurnOperations(operations: TurnOperations) {
-
-    this.ledger_.mergeTurnOperations(operations);
-
-  }
-
-
-
-  extractLastAssistantText(): string {
-
-    return this.conversation_.extractLastAssistantText();
-
-  }
-
-
-
-  refreshOperations(): TurnOperations {
-
-    return this.ledger_.refreshOperations();
-
-  }
-
-
-
-  collectTurnSummary(): TurnSummary {
-
-    return this.ledger_.collectTurnSummary(this.extractLastAssistantText());
-
-  }
-
-
-
-  snapshotProgress() {
-
-    return this.ledger_.snapshotProgress();
-
-  }
-
-
-
-  noteProgress(before: ReturnType<AgentSession['snapshotProgress']>) {
-
-    this.ledger_.noteProgress(before);
-
-  }
-
-
-
-  ensureWorkspace(cwd?: string): string {
-
-    const target = cwd ?? this.cwd;
-
-
-
-    if (target !== this.cwd) {
-
-      this.setWorkspace(target);
-
+  static async openSingleton(options: OpenAgentSessionOptions): Promise<AgentSession> {
+    if (AgentSession.current) {
+      return AgentSession.current;
     }
 
-
-
-    return target;
-
+    AgentSession.current = await AgentSession.open({
+      ...options,
+      plugins: options.plugins ?? defaultPlugins()
+    });
+    return AgentSession.current;
   }
 
-
-
-  commitAssistant(message: ChatCompletionAssistantMessageParam, streamed: boolean) {
-
-    this.conversation_.commitAssistant(message, streamed);
-
+  static async closeSingleton(): Promise<void> {
+    await AgentSession.current?.dispose();
   }
 
+  async dispose(): Promise<void> {
+    await this.driver().runHook(
+      PluginHook.SessionDispose,
+      HookStrategy.Void,
+      createPluginSessionContext(this)
+    );
 
-
-  addAssistant(message: ChatCompletionAssistantMessageParam) {
-
-    this.conversation_.addAssistant(message);
-
+    if (AgentSession.current === this) {
+      AgentSession.current = null;
+    }
   }
 
-
-
-  addSystemNote(content: string, options?: {emit?: boolean}) {
-
-    this.conversation_.addSystemNote(content, options);
-
+  setTurnSignal(signal?: AbortSignal) {
+    this.turnSignal_ = signal;
   }
 
-
-
-  hasLoadedSkill(name: string): boolean {
-
-    return this.loadedSkillNames_.has(name);
-
+  turnSignal(): AbortSignal | undefined {
+    return this.turnSignal_;
   }
 
-
-
-  injectSkill(skill: Skill) {
-
-    this.loadedSkillNames_.add(skill.name);
-
-    this.addSystemNote(this.skillRegistry.formatForPrompt(skill), {emit: true});
-
+  throwIfAborted() {
+    throwIfAborted(this.turnSignal_);
   }
 
-
-
-  setSkillCatalog(content: string, cwd: string) {
-
-    this.conversation_.setSkillCatalog(content, cwd);
-
+  llmOptions(): LlmOptions {
+    return { session: this, signal: this.turnSignal_ };
   }
 
-
-
-  clearSkillCatalog() {
-
-    this.conversation_.clearSkillCatalog();
-
+  flushStateDelta() {
+    flushStateDelta(
+      this.stateProjector_,
+      this.ledger.state,
+      this.ledger.refreshOperations(),
+      (content) => this.conversation.addSystemNote(content)
+    );
   }
 
+  buildLlmMessages(): AgentMessage[] {
+    this.flushStateDelta();
 
-
-  finishTool(id: string, content: string, options?: FinishToolOptions) {
-
-    this.conversation_.finishTool(id, content, options);
-
+    return this.conversation.messages;
   }
 
+  ensureWorkspace(cwd?: string): Promise<string> {
+    const target = cwd ?? this.cwd;
 
+    if (target !== this.cwd) {
+      return this.changeWorkspace_(target);
+    }
 
-  setWorkspace(cwd: string) {
+    return Promise.resolve(target);
+  }
+
+  private changeWorkspace_(cwd: string): Promise<string> {
+    const prev = this.cwd;
 
     this.cwd = cwd;
 
-    this.events_.setWorkspace(cwd);
+    this.events.setWorkspace(cwd);
 
+    return this.driver()
+      .runHook(PluginHook.WorkspaceChange, HookStrategy.Void, createPluginSessionContext(this), prev)
+      .then(() => cwd);
   }
 
+  setWorkspace(cwd: string) {
+    if (cwd === this.cwd) {
+      return;
+    }
+
+    const prev = this.cwd;
+
+    this.cwd = cwd;
+
+    this.events.setWorkspace(cwd);
+
+    void this.driver().runHook(
+      PluginHook.WorkspaceChange,
+      HookStrategy.Void,
+      createPluginSessionContext(this),
+      prev
+    );
+  }
 }
-
-

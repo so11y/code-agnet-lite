@@ -65,7 +65,7 @@ export class VerifyCoordinator {
   }
 
   static async judgeGate(session: AgentSession): Promise<TurnReview> {
-    const summary = session.collectTurnSummary();
+    const summary = session.ledger.collectTurnSummary(session.conversation.extractLastAssistantText());
     session.events.status('thinking', '验证门禁');
 
     const gate = await callStructuredLlm({
@@ -130,7 +130,7 @@ export class VerifyCoordinator {
           failures,
           fixRounds: MAX_FIX_ROUNDS,
           replans,
-          operations: session.refreshOperations(),
+          operations: session.ledger.refreshOperations(),
           gate: review.gate
         });
         session.events.status('error', '验证未通过，已达最大尝试次数');
@@ -142,7 +142,7 @@ export class VerifyCoordinator {
         replans += 1;
         fixRound = 0;
         await llmReplan(session);
-        session.appendUser(
+        session.conversation.appendUser(
           `${formatVerifyFailure(failures, MAX_FIX_ROUNDS)}\n\n先前修复方向可能不对，已换思路，请重新尝试。`
         );
         await this.runFixAttempt(session, agent, reasoningMode);
@@ -150,7 +150,7 @@ export class VerifyCoordinator {
         continue;
       }
 
-      session.appendUser(formatVerifyFailure(failures, fixRound + 1));
+      session.conversation.appendUser(formatVerifyFailure(failures, fixRound + 1));
       await this.runFixAttempt(session, agent, reasoningMode);
       fixRound += 1;
     }

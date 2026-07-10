@@ -367,6 +367,6 @@ stalemateRounds++; continue;
 
 ## 参考
 
-- 总体架构：`md/多agent-dag.md`
+- 总体架构：`notes/多agent-dag.md`
 - 记忆层：`BaseMemory` / `Blackboard`（`agent-memory.ts`）
 - 当前实现：`packages/core/src/dag/dag-scheduler.ts`、`resource-manager.ts`

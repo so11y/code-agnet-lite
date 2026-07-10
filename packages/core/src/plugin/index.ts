@@ -1,7 +1,7 @@
-export type {AgentPlugin, PluginTurnContext} from './types.js';
-export {createPluginTurnContext} from './types.js';
+export type {AgentPlugin, PluginSessionContext, PluginTurnContext} from './types.js';
+export {HookStrategy, PluginHook} from './types.js';
+export {createPluginSessionContext, createPluginTurnContext} from './types.js';
 export {PluginDriver} from './driver.js';
-export {sortPlugins} from './sort.js';
 export {
   defaultPlugins,
   modePlugin,
@@ -9,3 +9,4 @@ export {
   routerPlugin,
   verifyPlugin
 } from './builtins.js';
+export {skillCatalogPlugin} from './skill-catalog-plugin.js';

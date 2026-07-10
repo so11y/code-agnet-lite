@@ -12,49 +12,44 @@ type Options = {
 };
 
 export function useAgentSession({onEvent}: Options) {
-  const sessionRef = useRef<AgentSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
-  const ensureSession = useCallback((cwd: string) => {
-    if (!sessionRef.current) {
-      sessionRef.current = new AgentSession({
-        cwd,
-        provider: getAgentProviderKind(),
-        onEvent: (event) => onEventRef.current(event)
-      });
-    }
-
-    return sessionRef.current;
+  const ensureSession = useCallback(async (cwd: string) => {
+    return AgentSession.openSingleton({
+      cwd,
+      provider: getAgentProviderKind(),
+      onEvent: (event: AgentEvent) => onEventRef.current(event)
+    });
   }, []);
 
-  const clearSession = useCallback(() => {
+  const clearSession = useCallback(async () => {
     abortRef.current?.abort();
     abortRef.current = null;
 
-    const session = sessionRef.current;
-    sessionRef.current = null;
+    const session = AgentSession.current;
+    await AgentSession.closeSingleton();
 
     if (session) {
-      void agentProviders.dispose(session);
+      await agentProviders.dispose(session);
     }
   }, []);
 
   useEffect(() => () => {
-    clearSession();
+    void clearSession();
   }, [clearSession]);
 
   const cancelTurn = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
-  const runTurn = useCallback((input: string, cwd: string) => {
+  const runTurn = useCallback(async (input: string, cwd: string) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const session = ensureSession(cwd);
+    const session = await ensureSession(cwd);
     session.setTurnSignal(controller.signal);
     return runAgentTurn(session, input, cwd);
   }, [ensureSession]);

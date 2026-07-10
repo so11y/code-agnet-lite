@@ -1,12 +1,13 @@
 import {z} from 'zod';
 import {ROUTER_PROMPT, formatTurnUserMessage} from './prompt.js';
+import {REASONING_MODES} from './reasoning-mode.js';
 import type {AgentSession} from './session.js';
 import {callStructuredLlm} from './structured-llm-caller.js';
 
 const ROUTE_CONFIDENCE_THRESHOLD = 0.75;
 
 const routeSchema = z.object({
-  mode: z.enum(['react', 'tot', 'dag']),
+  mode: z.enum(REASONING_MODES),
   confidence: z.number().min(0).max(1),
   reason: z.string()
 });

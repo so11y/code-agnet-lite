@@ -34,7 +34,7 @@ function formatReview(review: Review, runFailed: boolean): string {
 }
 
 function formatStateContext(session: AgentSession) {
-  const state = session.state;
+  const state = session.ledger.state;
 
   return joinSections(
     state.rejected.length ? `已拒绝方向：\n${state.rejected.join('\n')}` : '',
@@ -54,14 +54,14 @@ async function requestPlan(
       {role: 'system', content: buildPlanPrompt(mode)},
       {
         role: 'user',
-        content: joinSections(extraContext, formatStateContext(session), formatSessionTranscript(session.messages))
+        content: joinSections(extraContext, formatStateContext(session), formatSessionTranscript(session.conversation.messages))
       }
     ],
     schema: planSchema,
     llmOptions: session.llmOptions(),
     onParseError(response) {
       const text = extractAssistantText(response);
-      session.addSystemNote(`${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`);
+      session.conversation.addSystemNote(`${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`);
       return undefined;
     }
   });
@@ -70,8 +70,8 @@ async function requestPlan(
     return undefined;
   }
 
-  session.applyHypotheses(plan.hypotheses);
-  session.addSystemNote(formatPlan(title, plan));
+  session.ledger.applyHypotheses(plan.hypotheses);
+  session.conversation.addSystemNote(formatPlan(title, plan));
   return plan;
 }
 
@@ -81,9 +81,9 @@ export async function llmPlan(session: AgentSession) {
 }
 
 export async function llmReplan(session: AgentSession) {
-  session.rejectHypotheses(session.state.hypotheses);
-  session.applyHypotheses([]);
-  session.state.confidence = clamp(session.state.confidence - 0.15, 0, 1);
+  session.ledger.rejectHypotheses(session.ledger.state.hypotheses);
+  session.ledger.applyHypotheses([]);
+  session.ledger.state.confidence = clamp(session.ledger.state.confidence - 0.15, 0, 1);
 
   await requestPlan(
     session,
@@ -110,7 +110,7 @@ export async function updateStateFromRun(
   session: AgentSession,
   result: AgentRunResult,
   error?: unknown,
-  progressBefore = session.snapshotProgress()
+  progressBefore = session.ledger.snapshotProgress()
 ) {
   session.events.status('thinking', '复盘');
   const runFailed = didRunFail(result, error);
@@ -124,7 +124,7 @@ export async function updateStateFromRun(
           '运行结果：',
           formatRunOutcome(result, error),
           '会话记录：',
-          formatSessionTranscript(session.messages)
+          formatSessionTranscript(session.conversation.messages)
         )
       }
     ],
@@ -132,28 +132,28 @@ export async function updateStateFromRun(
     llmOptions: session.llmOptions(),
     onParseError(response) {
       const text = extractAssistantText(response);
-      session.addSystemNote(`运行复盘解析失败。原始输出：\n\n${text}`);
+      session.conversation.addSystemNote(`运行复盘解析失败。原始输出：\n\n${text}`);
       return undefined;
     }
   });
 
   if (!review) {
-    session.noteProgress(progressBefore);
+    session.ledger.noteProgress(progressBefore);
     return undefined;
   }
 
-  session.addSystemNote(formatReview(review, runFailed));
-  session.addFacts(review.facts);
-  session.state.confidence = review.confidence;
+  session.conversation.addSystemNote(formatReview(review, runFailed));
+  session.ledger.addFacts(review.facts);
+  session.ledger.state.confidence = review.confidence;
 
   if (runFailed || !review.directionCorrect) {
-    session.rejectHypotheses(review.rejected);
+    session.ledger.rejectHypotheses(review.rejected);
 
     if (review.hypotheses.length) {
-      session.applyHypotheses(review.hypotheses);
+      session.ledger.applyHypotheses(review.hypotheses);
     }
   }
 
-  session.noteProgress(progressBefore);
+  session.ledger.noteProgress(progressBefore);
   return review;
 }

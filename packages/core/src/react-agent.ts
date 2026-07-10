@@ -37,7 +37,7 @@ export abstract class ReActAgent {
       this.session.events.status('thinking', `${step}/${this.maxSteps}`);
 
       if (remaining <= WRAP_UP_THRESHOLD) {
-        this.session.addSystemNote(buildWrapUpPrompt(remaining), {emit: false});
+        this.session.conversation.addSystemNote(buildWrapUpPrompt(remaining), {emit: false});
       }
 
       let streamed = false;
@@ -72,7 +72,7 @@ export abstract class ReActAgent {
         this.session.events.endThinkingStream();
       }
 
-      this.session.commitAssistant(message, streamed);
+      this.session.conversation.commitAssistant(message, streamed);
 
       if (!message.tool_calls?.length) {
         return {completed: true, steps: step, reason: 'final_answer'};
@@ -121,7 +121,7 @@ export abstract class ReActAgent {
       return;
     }
 
-    this.session.recordToolCall(call.name, parsed.data);
+    this.session.ledger.recordToolCall(call.name, parsed.data);
 
     try {
       const {output, display} = normalizeToolResult(
@@ -135,7 +135,7 @@ export abstract class ReActAgent {
           this.session.turnSignal()
         )
       );
-      this.session.finishTool(call.id, truncate(output), {
+      this.session.conversation.finishTool(call.id, truncate(output), {
         display,
         toolName: call.name,
         toolInput: call.input
@@ -154,6 +154,6 @@ export abstract class ReActAgent {
   }
 
   private failTool(id: string, message: string) {
-    this.session.finishTool(id, message, {error: message});
+    this.session.conversation.finishTool(id, message, {error: message});
   }
 }

@@ -2,7 +2,8 @@ export * from './session-types.js';
 export * from './agent-memory.js';
 export {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
 export {createDefaultSkillRegistry, type Skill, type SkillMeta, type SkillRegistry} from './skill-registry.js';
-export {AgentSession} from './session.js';
+export {Skills} from './skills/skills.js';
+export {AgentSession, type OpenAgentSessionOptions} from './session.js';
 export * from './state-ai-view.js';
 export {
   DefaultCodeAgent,
@@ -35,12 +36,16 @@ export {
 } from './state-delta-projector.js';
 export {
   PluginDriver,
+  HookStrategy,
+  PluginHook,
   defaultPlugins,
   modePlugin,
   preparePlugin,
   routerPlugin,
   verifyPlugin,
+  skillCatalogPlugin,
   type AgentPlugin,
+  type PluginSessionContext,
   type PluginTurnContext
 } from './plugin/index.js';
 export {

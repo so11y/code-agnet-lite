@@ -1,13 +1,7 @@
-import type {SerializedTaskGraph, TaskNodeKind, TaskNodeStatus} from '@code-agent-lite/core';
+import type {SerializedTaskGraph, TaskNode, TaskNodeKind, TaskNodeStatus} from '@code-agent-lite/core';
 import {topologicalSortIds} from '@code-agent-lite/core';
 
-export type PlanTodoItem = {
-  id: string;
-  kind: TaskNodeKind;
-  goal: string;
-  status: TaskNodeStatus;
-  error?: string;
-};
+export type PlanTodoItem = Pick<TaskNode, 'id' | 'kind' | 'goal' | 'status' | 'error'>;
 
 export type PlanTodoState = {
   summary?: string;

@@ -1,7 +1,8 @@
 import {BaseMemory} from '../agent-memory.js';
 import type {TurnOperations} from '../types/operations.js';
+import type {TaskNodeKind} from './task-node-kind.js';
 
-export type TaskNodeKind = 'explore' | 'edit' | 'verify' | 'merge';
+export type {TaskNodeKind} from './task-node-kind.js';
 
 export type TaskNodeStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 

@@ -27,11 +27,11 @@ export function shouldContinueTot(result: TotTurnResult): boolean {
 export async function runTotTurn(session: AgentSession, agent: CodeAgent): Promise<TotTurnResult> {
   session.throwIfAborted();
 
-  if (isEmpty(session.state.hypotheses)) {
+  if (isEmpty(session.ledger.state.hypotheses)) {
     await llmPlan(session);
   }
 
-  const progressBefore = session.snapshotProgress();
+  const progressBefore = session.ledger.snapshotProgress();
 
   let run: AgentRunResult;
   try {
@@ -52,7 +52,7 @@ export async function runTotTurn(session: AgentSession, agent: CodeAgent): Promi
     run,
     review,
     directionCorrect: review?.directionCorrect ?? false,
-    confidence: session.state.confidence
+    confidence: session.ledger.state.confidence
   };
 }
 
@@ -71,10 +71,10 @@ export async function runTotTurnWithRetries(
     session.throwIfAborted();
 
     if (attempt > 1) {
-      if (session.state.noProgress >= 2) {
+      if (session.ledger.state.noProgress >= 2) {
         await llmReplan(session);
-        session.state.noProgress = 0;
-      } else if (isEmpty(session.state.hypotheses)) {
+        session.ledger.state.noProgress = 0;
+      } else if (isEmpty(session.ledger.state.hypotheses)) {
         await llmPlan(session);
       }
     }

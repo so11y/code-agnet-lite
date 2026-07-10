@@ -24,9 +24,6 @@ export type CodeAgent = {
   run(): Promise<AgentRunResult>;
 };
 
-/** 可在本地 session 内跑 OpenAI ReAct tool loop 的 Agent */
-export type ToolLoopAgent = ReActAgent;
-
-export function supportsToolLoop(agent: CodeAgent): agent is ToolLoopAgent {
+export function supportsToolLoop(agent: CodeAgent): agent is ReActAgent {
   return agent instanceof ReActAgent && !(agent instanceof CursorCodeAgent);
 }

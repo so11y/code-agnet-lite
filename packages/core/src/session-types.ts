@@ -1,6 +1,6 @@
 import type {SerializedTaskGraph, TaskNodeKind, TaskNodeStatus, TaskOutput} from './dag/types.js';
 
-export type ReasoningMode = 'react' | 'tot' | 'dag';
+export type {ReasoningMode} from './reasoning-mode.js';
 
 export * from './types/events.js';
 export * from './types/llm.js';

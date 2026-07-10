@@ -3,13 +3,10 @@ import type {SessionState} from './agent-memory.js';
 import type {TurnOperations} from './session-types.js';
 import {createEmptyTurnOperations} from './types/operations.js';
 
-export type InjectedSnapshot = {
-  facts: string[];
-  hypotheses: string[];
-  rejected: string[];
-  confidence: number;
-  visitedFiles: string[];
-  searchedTerms: string[];
+export type InjectedSnapshot = Pick<
+  SessionState,
+  'facts' | 'hypotheses' | 'rejected' | 'confidence' | 'visitedFiles' | 'searchedTerms'
+> & {
   turnOps: TurnOperations;
 };
 

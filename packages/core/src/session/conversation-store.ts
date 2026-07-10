@@ -15,6 +15,7 @@ export class ConversationStore {
   readonly messages: AgentMessage[];
   private skillCatalogMessageIndex_?: number;
   private skillCatalogCwd_?: string;
+  private skillCatalogSyncedCwd_?: string;
 
   constructor(
     cwd: string,
@@ -75,6 +76,19 @@ export class ConversationStore {
     }
 
     this.skillCatalogCwd_ = cwd;
+  }
+
+  isSkillCatalogSynced(cwd: string): boolean {
+    return this.skillCatalogSyncedCwd_ === cwd;
+  }
+
+  markSkillCatalogSynced(cwd: string) {
+    this.skillCatalogSyncedCwd_ = cwd;
+  }
+
+  invalidateSkillCatalog() {
+    this.clearSkillCatalog();
+    this.skillCatalogSyncedCwd_ = undefined;
   }
 
   clearSkillCatalog() {
