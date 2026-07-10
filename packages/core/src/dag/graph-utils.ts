@@ -1,10 +1,11 @@
+import {requireCjs} from '@code-agent-lite/shared';
 import type {Graph} from '@dagrejs/graphlib';
-import * as graphlibPkg from '@dagrejs/graphlib';
 import type {TaskGraph, TaskNode} from './types.js';
 
-// tsx wraps pure-ESM deps as { default: ... }; native Node exposes named exports.
-const graphlib = (graphlibPkg as {default?: typeof graphlibPkg}).default ?? graphlibPkg;
-const {Graph: GraphConstructor, alg} = graphlib;
+const {Graph: GraphConstructor, alg} = requireCjs<typeof import('@dagrejs/graphlib')>(
+  '@dagrejs/graphlib',
+  import.meta.url
+);
 
 function createGraphFromEdges(
   nodeIds: Iterable<string>,
