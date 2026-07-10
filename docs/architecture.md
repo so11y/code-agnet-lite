@@ -71,6 +71,23 @@ session.toolRegistry      // 工具列表，LLM tool calling 用
 
 ---
 
+## Skill 加载
+
+用户说明：[skills.md](skills.md)
+
+```
+sessionReady  → skillCatalogPlugin → Skills.mountCatalog()
+prepareTurn   → /skill → ensureLoaded → inject
+execute       → load_skill → ensureLoaded → inject（OpenAI 模式）
+```
+
+- 状态与去重：`Skills`（`packages/core/src/skills/skills.ts`），唯一入口 `ensureLoaded`
+- IO / 文案：`packages/tools/src/skills/`
+- 主 Agent 自决是否调 `load_skill`；无 Skill Resolver
+- Cursor 模式：`cursor-code-agent` 将 Catalog + 已 inject 正文拼进 SDK prompt
+
+---
+
 ## 程序状态与记忆
 
 运行时全量状态在 `TurnLedger.state`（类型 `SessionState`，继承 `BaseMemory`）。程序侧维护完整账本，LLM 侧通过 StateDelta 只看增量（见下一节）。
@@ -209,11 +226,13 @@ OpenAiLlmProvider:
 
 ## Plugin 链
 
-`defaultPlugins()` 固定顺序，provider 差异只在 `agentProviders.plugin()`：
+`defaultPlugins()` 顺序：
 
 ```
-prepare → router → provider → mode → verify
+skillCatalog → prepare → router → provider → mode → verify
 ```
+
+Session 级：`skillCatalogPlugin` 在 `sessionReady` / `workspaceChange` 挂 Catalog。
 
 扩展方式：自定义 `session.options.plugins` 替换整条链，或仿 builtins 增删 plugin。`react/tot/dag` 已合并为 `modePlugin`。
 
@@ -256,13 +275,10 @@ Plugin 以工厂函数返回 plain object（`AgentPlugin`），不是 class。
 
 ## 文档索引
 
-| 文件 | 性质 | 内容 |
-|------|------|------|
-| **docs/architecture.md** | **实现权威** | 当前代码结构与约定（本文） |
-| [docs/README.md](README.md) | 本项目文档索引 | `docs/` 目录说明 |
-| [notes/session.md](../notes/session.md) | 设计学习 | Session / 记忆概念 |
-| [notes/README.md](../notes/README.md) | 设计学习索引 | `notes/` 目录说明 |
-| [notes/engineering.md](../notes/engineering.md) | 设计学习 | Loop / Harness 设计 |
-| [notes/](../notes/) 其余文件 | 设计学习 | 推理、检索、DAG 等探索性文档 |
+| 文件 | 内容 |
+|------|------|
+| [getting-started.md](getting-started.md) | 使用说明 |
+| [skills.md](skills.md) | Skill |
+| [notes/README.md](../notes/README.md) | 设计探索 |
 
-`notes/` 目录用于背景学习与方案探索，**若与本文或源码不一致，以源码和本文为准**。
+`notes/` 与源码不一致时，以源码和本文为准。

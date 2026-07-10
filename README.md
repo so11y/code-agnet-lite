@@ -1,51 +1,46 @@
-# OpenCode Lite
+# code-agent-lite
 
-用于学习 Agent 内部机制的最小终端 Code Agent（TypeScript + Ink + OpenAI）。
+用于学习 Agent 内部机制的最小终端 Code Agent（TypeScript + Ink + OpenAI / Cursor）。在本地工作区读代码、改代码、跑命令。
 
-## 运行
+## 快速开始
 
 ```bash
 npm install
-# 配置 .env：OPENAI_API_KEY=...
-npm run dev
+cp .env.example .env    # Windows: copy .env.example .env
 ```
 
-Provider 可选 `AGENT_PROVIDER=openai|cursor`（见 `packages/platform`）。该选项只影响 **Agent 执行层**；router / planner 等结构化 LLM 调用目前固定走 OpenAI（见架构文档）。
+编辑 `.env`，填入 API Key（见下方说明），然后：
+
+```bash
+npm run dev                  # 工作区 = 当前目录
+npm run dev -- D:\my-project # 指定工作区
+```
+
+### 配置 API Key
+
+1. 复制 `.env.example` → `.env`（项目根目录，与 `package.json` 同级）
+2. 打开 [OpenAI API Keys](https://platform.openai.com/api-keys)，创建密钥
+3. 写入 `.env`：
+
+```env
+OPENAI_API_KEY=sk-proj-你的密钥
+```
+
+4. 若用国内/自建 **OpenAI 兼容网关**，再加一行 `OPENAI_BASE_URL=https://你的网关/v1`
+
+**Cursor 模式（可选）：** `.env` 里设 `AGENT_PROVIDER=cursor` 和 `CURSOR_API_KEY`（Cursor 账户获取）。此时主 Agent 走 Cursor，但路由/规划仍要 `OPENAI_API_KEY`。
+
+完整变量说明见 [.env.example](.env.example) 和 [docs/getting-started.md](docs/getting-started.md)。
+
+**使用说明：** [docs/getting-started.md](docs/getting-started.md)
 
 ## 文档
 
-| 目录 | 性质 | 说明 |
-|------|------|------|
-| [docs/](docs/) | **本项目实现** | 与当前代码对应的架构、约定、字段说明 |
-| [notes/](notes/) | **设计学习** | Agent 原理、记忆、推理、DAG 等探索性笔记，非实现权威 |
-
-**实现权威：** [docs/architecture.md](docs/architecture.md)
-
-**设计学习索引：** [notes/README.md](notes/README.md)
-
-### 本项目（docs）
-
-- [architecture.md](docs/architecture.md) — 包结构、Session、状态字段、StateDelta、LLM 两层模型
-
-### 设计学习（notes）
-
-| 文件 | 主题 |
+| 文档 | 读者 |
 |------|------|
-| [session.md](notes/session.md) | Session、Summary、召回 |
-| [engineering.md](notes/engineering.md) | Loop / Harness 工程 |
-| [推理1.md](notes/推理1.md) / [推理2.md](notes/推理2.md) | 推理模式探索 |
-| [短记忆与长记忆.md](notes/短记忆与长记忆.md) | 记忆分层 |
-| [混合检索.md](notes/混合检索.md) / [多路召回.md](notes/多路召回.md) | 检索方案 |
-| [多agent-dag.md](notes/多agent-dag.md) / [dag-promise-scheduler.md](notes/dag-promise-scheduler.md) | DAG 多 Agent |
+| [getting-started.md](docs/getting-started.md) | 安装、配置、TUI、命令、工具 |
+| [skills.md](docs/skills.md) | Skill 编写与激活 |
+| [architecture.md](docs/architecture.md) | 实现架构（开发者） |
+| [notes/](notes/) | 原理探索（非实现权威） |
 
-若 `notes/` 与源码或 `docs/architecture.md` 不一致，**以源码和 architecture.md 为准**。
-
-## 包
-
-| 包 | 说明 |
-|----|------|
-| `@code-agent-lite/cli` | TUI |
-| `@code-agent-lite/core` | Agent 核心 |
-| `@code-agent-lite/tools` | 工具、Skill、Rule |
-| `@code-agent-lite/platform` | env / workspace |
-| `@code-agent-lite/shared` | 共享工具函数 |
+索引：[docs/README.md](docs/README.md)

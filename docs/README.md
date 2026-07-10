@@ -1,9 +1,9 @@
-# 本项目文档
-
-与当前代码实现对应的说明，**以源码与本目录为准**。
+# 文档索引
 
 | 文件 | 内容 |
 |------|------|
-| [architecture.md](architecture.md) | 包结构、Turn 流程、Session、状态字段、StateDelta、Plugin、LLM 两层模型 |
+| [getting-started.md](getting-started.md) | 安装、配置、TUI、工具、Provider |
+| [skills.md](skills.md) | Skill 目录、激活、编写 |
+| [architecture.md](architecture.md) | 包结构、Turn、Session、Plugin、Skill 实现 |
 
-背景学习与方案探索见 [notes/](../notes/README.md)（非实现权威）。
+设计探索：[notes/](../notes/README.md)（非实现权威，含历史规划稿）
