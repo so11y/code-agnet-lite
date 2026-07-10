@@ -15,4 +15,4 @@
 | [混合检索.md](混合检索.md) / [多路召回.md](多路召回.md) | 检索方案 |
 | [多agent-dag.md](多agent-dag.md) / [dag-promise-scheduler.md](dag-promise-scheduler.md) | DAG 多 Agent |
 | [plan-plugin-lifecycle-hooks.md](plan-plugin-lifecycle-hooks.md) | Plugin 生命周期规划（部分已落地） |
-| [plan-dag-replan-on-failure.md](plan-dag-replan-on-failure.md) | DAG 失败后 replan 待办（草案） |
+| [plan-dag-replan-on-failure.md](plan-dag-replan-on-failure.md) | DAG 失败分层恢复：重试 → 链级 replan → 全图 replan（草案） |
