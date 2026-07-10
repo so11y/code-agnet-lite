@@ -1,3 +1,4 @@
+import {sortBy} from 'lodash-es';
 import OpenAI from 'openai';
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import type {ChatCompletion} from 'openai/resources/chat/completions';
@@ -172,9 +173,7 @@ export class OpenAiLlmProvider implements LlmProvider {
       options.session.events.recordTokenUsage(usage);
     }
 
-    const toolCalls = [...toolCallsByIndex.entries()]
-      .sort(([left], [right]) => left - right)
-      .map(([, toolCall]) => ({
+    const toolCalls = sortBy([...toolCallsByIndex.entries()], ([index]) => index).map(([, toolCall]) => ({
         id: toolCall.id,
         type: 'function' as const,
         function: {

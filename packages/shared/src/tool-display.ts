@@ -1,3 +1,5 @@
+import {pickStringField} from './object.js';
+
 export type ToolDisplay =
   | {kind: 'code'; path?: string; content: string}
   | {kind: 'diff'; path?: string; content: string}
@@ -5,16 +7,22 @@ export type ToolDisplay =
 
 export const READ_FILE_DISPLAY_MAX_LINES = 24;
 
+export function limitLines(
+  lines: string[],
+  maxLines: number,
+  omittedMessage = (omitted: number) => `··· 已省略 ${omitted} 行`
+): string[] {
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+
+  return [...lines.slice(0, maxLines), omittedMessage(lines.length - maxLines)];
+}
+
 export type ToolResult = string | {output: string; display?: ToolDisplay};
 
 export function limitDisplayLines(content: string, maxLines = READ_FILE_DISPLAY_MAX_LINES): string {
-  const lines = content.split('\n');
-
-  if (lines.length <= maxLines) {
-    return content;
-  }
-
-  return [...lines.slice(0, maxLines), `··· 已省略 ${lines.length - maxLines} 行`].join('\n');
+  return limitLines(content.split('\n'), maxLines).join('\n');
 }
 
 export function normalizeToolResult(result: ToolResult): {output: string; display?: ToolDisplay} {
@@ -27,11 +35,7 @@ export function normalizeToolResult(result: ToolResult): {output: string; displa
 }
 
 export function toolInputPath(input: unknown): string | undefined {
-  if (input && typeof input === 'object' && 'path' in input && typeof input.path === 'string') {
-    return input.path;
-  }
-
-  return undefined;
+  return pickStringField(input, 'path');
 }
 
 export function buildSyntheticDiff(path: string, before: string, after: string): string {

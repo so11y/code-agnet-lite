@@ -1,3 +1,4 @@
+import {compact} from 'lodash-es';
 import {formatOperationSection, formatVerifyFailureBlock, joinSections} from '@code-agent-lite/shared';
 import type {TurnOperations, TurnSummary, VerifyGate} from '../session-types.js';
 import {formatUserRequest} from '../prompt.js';
@@ -45,26 +46,16 @@ export function formatVerifyFailure(failures: VerifyResult[], round: number): st
 }
 
 function inferFailureReasons(failures: VerifyResult[]): string[] {
-  const reasons: string[] = [];
   const combined = failures.map((failure) => failure.output).join('\n');
 
-  if (/TS\d{4}/.test(combined)) {
-    reasons.push('存在 TypeScript 类型错误，自动修复未能完全消除');
-  }
-  if (/FAIL|AssertionError|Expected|received/i.test(combined)) {
-    reasons.push('单元测试断言失败，逻辑或边界条件仍有问题');
-  }
-  if (/MODULE_NOT_FOUND|Cannot find module/i.test(combined)) {
-    reasons.push('缺少依赖或模块路径错误，可能需要先安装依赖');
-  }
-  if (/ENOENT|EACCES/i.test(combined)) {
-    reasons.push('文件或权限问题，可能与工作区路径有关');
-  }
-  if (reasons.length === 0) {
-    reasons.push('验证命令返回非零退出码，请查看上方具体错误输出');
-  }
+  const reasons = compact([
+    /TS\d{4}/.test(combined) && '存在 TypeScript 类型错误，自动修复未能完全消除',
+    /FAIL|AssertionError|Expected|received/i.test(combined) && '单元测试断言失败，逻辑或边界条件仍有问题',
+    /MODULE_NOT_FOUND|Cannot find module/i.test(combined) && '缺少依赖或模块路径错误，可能需要先安装依赖',
+    /ENOENT|EACCES/i.test(combined) && '文件或权限问题，可能与工作区路径有关'
+  ]);
 
-  return reasons;
+  return reasons.length > 0 ? reasons : ['验证命令返回非零退出码，请查看上方具体错误输出'];
 }
 
 export function buildFinalFailureReport(options: {

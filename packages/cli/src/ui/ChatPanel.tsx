@@ -1,3 +1,4 @@
+import {findLast} from 'lodash-es';
 import React from 'react';
 import {Box, Text} from 'ink';
 import type {ChatItem, ChatRole, ToolCallItem} from '@code-agent-lite/core';
@@ -92,7 +93,11 @@ function ThinkingBubble({message, messageKey}: {message: ChatItem; messageKey: s
 
 function renderTranscriptItems(items: TranscriptItem[]) {
   const detailToolIds = pickDetailToolIds(items);
-  const latestToolId = [...items].reverse().find((entry) => entry.type === 'tool')?.item.id;
+  const latestTool = findLast(
+    items,
+    (entry): entry is {type: 'tool'; item: ToolCallItem} => entry.type === 'tool'
+  );
+  const latestToolId = latestTool?.item.id;
   const nodes: React.ReactNode[] = [];
   let collapsedToolCount = 0;
   let messageCounter = 0;

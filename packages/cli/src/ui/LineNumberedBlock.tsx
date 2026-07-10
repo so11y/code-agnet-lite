@@ -1,14 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 
-export function limitLines(lines: string[], maxLines: number): string[] {
-  if (lines.length <= maxLines) {
-    return lines;
-  }
-
-  return [...lines.slice(0, maxLines), `··· 已截断，仅显示前 ${maxLines} 行`];
-}
-
 type Props = {
   title?: string;
   lines: string[];

@@ -1,3 +1,4 @@
+import {compact} from 'lodash-es';
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {pickField} from '@code-agent-lite/shared';
 import type {AgentTool} from '@code-agent-lite/tools';
@@ -67,8 +68,8 @@ class WorkerCodeAgent extends DefaultCodeAgent {
 }
 
 function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
-  const lines = node.dependsOn
-    .map((id) => {
+  const lines = compact(
+    node.dependsOn.map((id) => {
       const output = blackboard.nodeOutputs.get(id);
       if (!output) {
         return;
@@ -76,7 +77,7 @@ function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
 
       return `节点 ${id}：${output.summary}`;
     })
-    .filter(Boolean);
+  );
 
   if (!lines.length) {
     return '';

@@ -1,6 +1,7 @@
 import React, {useMemo} from 'react';
 import {Box, Text} from 'ink';
-import {LineNumberedBlock, limitLines} from './LineNumberedBlock.js';
+import {limitLines} from '@code-agent-lite/shared';
+import {LineNumberedBlock} from './LineNumberedBlock.js';
 
 const MAX_CODE_LINES = 40;
 
@@ -67,7 +68,7 @@ function renderInlineText(content: string): React.ReactNode {
 }
 
 function CodeBlock({content, lang}: {content: string; lang: string}) {
-  const lines = limitLines(content.split('\n'), MAX_CODE_LINES);
+  const lines = limitLines(content.split('\n'), MAX_CODE_LINES, () => `··· 已截断，仅显示前 ${MAX_CODE_LINES} 行`);
 
   return (
     <LineNumberedBlock

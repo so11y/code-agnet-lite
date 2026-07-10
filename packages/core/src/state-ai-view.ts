@@ -1,4 +1,4 @@
-import {isEqual} from 'lodash-es';
+import {difference, isEqual} from 'lodash-es';
 import type {SessionState} from './agent-memory.js';
 import type {TurnOperations} from './session-types.js';
 import {createEmptyTurnOperations} from './types/operations.js';
@@ -59,19 +59,19 @@ export function buildInjectedSnapshot(state: SessionState, turnOps: TurnOperatio
 }
 
 function diffTurnList(prev: string[], next: string[]): string[] | undefined {
-  const added = next.filter((item) => !prev.includes(item));
+  const added = difference(next, prev);
   return added.length ? added : undefined;
 }
 
 export function diffInjectedSnapshot(prev: InjectedSnapshot, next: InjectedSnapshot): StateDelta | null {
   const delta: StateDelta = {};
 
-  const addedFacts = next.facts.filter((fact) => !prev.facts.includes(fact));
+  const addedFacts = difference(next.facts, prev.facts);
   if (addedFacts.length) {
     delta.addedFacts = addedFacts;
   }
 
-  const addedRejected = next.rejected.filter((item) => !prev.rejected.includes(item));
+  const addedRejected = difference(next.rejected, prev.rejected);
   if (addedRejected.length) {
     delta.addedRejected = addedRejected;
   }

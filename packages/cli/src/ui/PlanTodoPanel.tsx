@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text} from 'ink';
+import {find, some} from 'lodash-es';
 import {Spinner} from './Spinner.js';
 import {compactText} from '@code-agent-lite/shared';
 import {
@@ -51,8 +52,8 @@ export function PlanTodoPanel({plan}: Props) {
   const finished = countFinished(plan.items);
   const total = plan.items.length;
   const allDone = total > 0 && finished === total;
-  const hasFailed = plan.items.some((item) => item.status === 'failed');
-  const running = plan.items.find((item) => item.status === 'running');
+  const hasFailed = some(plan.items, {status: 'failed'});
+  const running = find(plan.items, {status: 'running'});
 
   return (
     <Box flexDirection="column" marginTop={1} paddingX={1} borderStyle="round" borderColor="gray">
