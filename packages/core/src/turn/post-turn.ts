@@ -16,7 +16,7 @@ export async function runPostTurnVerify(agent: CodeAgent, session: AgentSession)
   const fixAgent = supportsToolLoop(agent)
     ? agent
     : agentProviders.resolve('openai').provide(session);
-  await new VerifyCoordinator(session.cwd).runFixLoop(
+  await new VerifyCoordinator(session.cwd, session.turnSignal()).runFixLoop(
     fixAgent,
     session,
     review,

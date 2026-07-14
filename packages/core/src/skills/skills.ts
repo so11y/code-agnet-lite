@@ -1,5 +1,6 @@
 import type {ConversationStore} from '../session/conversation-store.js';
 import type {Skill, SkillMeta, SkillRegistry} from '../skill-registry.js';
+import type {AgentMessage} from '../session-types.js';
 
 export type EnsureLoadedResult = {
   skill: Skill;
@@ -8,6 +9,8 @@ export type EnsureLoadedResult = {
 
 export class Skills {
   private readonly loaded_ = new Set<string>();
+  private readonly loadedMessages_: AgentMessage[] = [];
+  private readonly loadedPrompts_: string[] = [];
   private catalogItems_: SkillMeta[] = [];
 
   constructor(
@@ -28,13 +31,19 @@ export class Skills {
     return this.catalogItems_;
   }
 
+  loadedPromptNotes(): string[] {
+    return [...this.loadedPrompts_];
+  }
+
   inject(skill: Skill): boolean {
     if (this.isLoaded(skill.name)) {
       return false;
     }
 
+    const prompt = this.registry.formatForPrompt(skill);
     this.loaded_.add(skill.name);
-    this.conversation.addSystemNote(this.registry.formatForPrompt(skill), {emit: true});
+    this.loadedPrompts_.push(prompt);
+    this.loadedMessages_.push(this.conversation.addSystemNote(prompt, {emit: true}));
     return true;
   }
 
@@ -69,5 +78,13 @@ export class Skills {
   invalidateCatalog(): void {
     this.conversation.invalidateSkillCatalog();
     this.catalogItems_ = [];
+  }
+
+  resetWorkspace(): void {
+    this.invalidateCatalog();
+    this.conversation.removeMessages(this.loadedMessages_);
+    this.loaded_.clear();
+    this.loadedMessages_.length = 0;
+    this.loadedPrompts_.length = 0;
   }
 }

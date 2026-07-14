@@ -3,6 +3,7 @@ import {throwIfAborted} from '@code-agent-lite/shared';
 import {
   createStateDeltaProjectorState,
   flushStateDelta,
+  resetTurnOperationsProjection,
   type StateDeltaProjectorState
 } from './state-delta-projector.js';
 
@@ -144,6 +145,11 @@ export class AgentSession {
     );
   }
 
+  beginTurn(userInput: string) {
+    this.ledger.beginTurn(userInput);
+    resetTurnOperationsProjection(this.stateProjector_);
+  }
+
   buildLlmMessages(): AgentMessage[] {
     this.flushStateDelta();
 
@@ -172,6 +178,8 @@ export class AgentSession {
     const prev = this.cwd;
 
     this.options.cwd = cwd;
+
+    this.conversation.setWorkspace(cwd);
 
     this.events.setWorkspace(cwd);
 

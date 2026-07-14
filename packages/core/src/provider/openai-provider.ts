@@ -62,17 +62,20 @@ export class OpenAiLlmProvider implements LlmProvider {
     const thinking = thinkingExtraBody();
     const toolList = resolveTools(options?.session);
 
-    return createClient().chat.completions.create({
-      model: getOpenAiModel(DEFAULT_MODEL),
-      messages,
-      ...(thinking ? {extra_body: thinking} : {}),
-      ...(withTools
-        ? {
-            tools: toolList.map((tool) => tool.openaiTool),
-            tool_choice: 'auto' as const
-          }
-        : {})
-    });
+    return createClient().chat.completions.create(
+      {
+        model: getOpenAiModel(DEFAULT_MODEL),
+        messages,
+        ...(thinking ? {extra_body: thinking} : {}),
+        ...(withTools
+          ? {
+              tools: toolList.map((tool) => tool.openaiTool),
+              tool_choice: 'auto' as const
+            }
+          : {})
+      },
+      options?.signal ? {signal: options.signal} : undefined
+    );
   }
 
   private async completeChat(
@@ -104,16 +107,18 @@ export class OpenAiLlmProvider implements LlmProvider {
     const thinking = thinkingExtraBody();
     const toolList = resolveTools(options.session);
 
-    const stream = await createClient().chat.completions.create({
-      model: getOpenAiModel(DEFAULT_MODEL),
-      messages,
-      stream: true,
-      stream_options: {include_usage: true},
-      ...(thinking ? {extra_body: thinking} : {}),
-      tools: toolList.map((tool) => tool.openaiTool),
-      tool_choice: 'auto',
-      ...(options.signal ? {signal: options.signal} : {})
-    });
+    const stream = await createClient().chat.completions.create(
+      {
+        model: getOpenAiModel(DEFAULT_MODEL),
+        messages,
+        stream: true,
+        stream_options: {include_usage: true},
+        ...(thinking ? {extra_body: thinking} : {}),
+        tools: toolList.map((tool) => tool.openaiTool),
+        tool_choice: 'auto'
+      },
+      options.signal ? {signal: options.signal} : undefined
+    );
 
     let content = '';
     let reasoning = '';

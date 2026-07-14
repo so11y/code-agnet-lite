@@ -8,6 +8,12 @@ const task = (id: string, dependsOn: string[] = []) => ({
   dependsOn
 });
 
+const typedTask = (
+  id: string,
+  kind: 'explore' | 'edit' | 'verify' | 'merge',
+  dependsOn: string[] = []
+) => ({id, kind, goal: id, dependsOn});
+
 describe('TaskGraph', () => {
   it('rejects duplicate node ids', () => {
     expect(() => TaskGraph.fromPlan([task('worker'), task('worker'), task('merge', ['worker'])]))
@@ -66,5 +72,55 @@ describe('TaskGraph', () => {
         tasks: [task('a', ['merge']), task('merge', ['a'])]
       })
     ).toThrow('存在环');
+  });
+
+  it('requires merge to be the unique terminal reached by every branch', () => {
+    expect(() =>
+      TaskGraph.fromPlan([
+        task('worker'),
+        task('merge', ['worker']),
+        task('after-merge', ['merge'])
+      ])
+    ).toThrow('merge 节点必须是终点');
+
+    expect(() =>
+      TaskGraph.fromPlan([task('worker'), task('orphan'), task('merge', ['worker'])])
+    ).toThrow('orphan 无法汇入 merge');
+  });
+
+  it('requires every edit path to pass through verification', () => {
+    expect(() =>
+      TaskGraph.fromPlan([
+        typedTask('edit', 'edit'),
+        typedTask('merge', 'merge', ['edit'])
+      ])
+    ).toThrow('edit 任务 edit 之后必须存在 verify 节点');
+
+    expect(() =>
+      TaskGraph.fromPlan([
+        typedTask('edit', 'edit'),
+        typedTask('verify', 'verify', ['edit']),
+        typedTask('merge', 'merge', ['verify'])
+      ])
+    ).not.toThrow();
+  });
+
+  it('rejects recovery that removes verification after a completed edit', () => {
+    const graph = TaskGraph.fromPlan([
+      typedTask('edit', 'edit'),
+      typedTask('verify', 'verify', ['edit']),
+      typedTask('merge', 'merge', ['verify'])
+    ]);
+    graph.nodes.get('edit')!.status = 'done';
+    graph.nodes.get('verify')!.status = 'failed';
+
+    expect(() =>
+      graph.replaceSubgraph({
+        tasks: [
+          typedTask('verify', 'explore', ['edit']),
+          typedTask('merge', 'merge', ['verify'])
+        ]
+      })
+    ).toThrow('edit 任务 edit 之后必须存在 verify 节点');
   });
 });

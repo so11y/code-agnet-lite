@@ -1,5 +1,5 @@
 import type {AgentSession} from '../session.js';
-import {formatError, joinSections} from '@code-agent-lite/shared';
+import {joinSections} from '@code-agent-lite/shared';
 import {DagScheduler} from './dag-scheduler.js';
 import {llmPlanDag, llmReplanSubgraph} from './dag-planner.js';
 import {TaskGraph} from './task-graph.js';
@@ -33,11 +33,8 @@ class DagOrchestrator {
         tryRecoverFailures: (failed) => this.recover(failed)
       }).run();
       return this.finish();
-    } catch (error) {
-      const message = formatError(error);
-      this.session.events.status('error', message);
-      this.session.events.say('assistant', message);
-      throw error;
+    } finally {
+      this.session.ledger.mergeMemory(this.blackboard);
     }
   }
 
@@ -74,7 +71,7 @@ class DagOrchestrator {
   private finish(): boolean {
     const mergeNode = this.graph.mergeNode();
     if (mergeNode?.status === TASK_NODE_STATUS.DONE && mergeNode.output?.summary) {
-      this.session.ledger.mergeTurnOperations(this.blackboard.operations);
+      this.session.events.status('done', '完成');
       return true;
     }
 

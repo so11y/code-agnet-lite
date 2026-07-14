@@ -4,8 +4,6 @@ import {REASONING_MODES} from './reasoning-mode.js';
 import type {AgentSession} from './session.js';
 import {callStructuredLlm} from './structured-llm-caller.js';
 
-const ROUTE_CONFIDENCE_THRESHOLD = 0.75;
-
 const routeSchema = z.object({
   mode: z.enum(REASONING_MODES),
   confidence: z.number().min(0).max(1),
@@ -29,20 +27,6 @@ export async function routeReasoningMode(input: string, session: AgentSession): 
       mode: 'react',
       confidence: 0,
       reason: '路由模型没有返回有效 JSON，因此默认使用 ReAct。'
-    },
-    transform(parsed) {
-      if (parsed.mode !== 'react' && parsed.confidence >= ROUTE_CONFIDENCE_THRESHOLD) {
-        return parsed;
-      }
-
-      return {
-        mode: 'react' as const,
-        confidence: parsed.confidence,
-        reason:
-          parsed.mode === 'react'
-            ? parsed.reason
-            : `${parsed.reason}（置信度 ${parsed.confidence.toFixed(2)} 不足，已降级为 react）`
-      };
     }
   });
 }

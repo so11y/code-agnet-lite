@@ -35,6 +35,9 @@ export class TurnLedger {
   beginTurn(userInput: string) {
     this.turnUserInput = userInput;
     this.state.operations = createEmptyTurnOperations();
+    this.state.hypotheses = [];
+    this.state.confidence = 0;
+    this.state.noProgress = 0;
   }
 
   applyHypotheses(hypotheses: string[]) {
@@ -77,6 +80,10 @@ export class TurnLedger {
 
   mergeTurnOperations(operations: TurnOperations) {
     this.state.mergeFrom({operations});
+  }
+
+  mergeMemory(memory: MemoryMergeSource) {
+    this.state.mergeFrom(memory);
   }
 
   refreshOperations(): TurnOperations {

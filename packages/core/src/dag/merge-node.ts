@@ -24,16 +24,23 @@ export async function runMergeNode(
 
   session.events.status('thinking', 'Merge Agent');
 
+  const skillPrompts = session.skills.loadedPromptNotes();
   const response = await openAiLlm.plainChat(
     [
-      {role: 'system', content: '你是 Merge Agent，负责汇总多个 Worker 的结果，生成用户可见的最终回答。'},
+      {
+        role: 'system',
+        content: [
+          '你是 Merge Agent，负责汇总多个 Worker 的结果，生成用户可见的最终回答。',
+          ...skillPrompts
+        ].join('\n\n')
+      },
       {role: 'user', content: merged}
     ],
     session.llmOptions()
   );
 
   const summary = extractAssistantText(response) || '任务已完成。';
-  session.events.say('assistant', summary);
+  session.conversation.addAssistant({role: 'assistant', content: summary});
 
   return new TaskOutput({
     summary,

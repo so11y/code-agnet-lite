@@ -40,25 +40,35 @@ function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
   return lines.length ? ['[upstream]', ...lines].join('\n') : '';
 }
 
-function createWorkerOnEvent(
-  onEvent: AgentSessionOptions['onEvent'],
-  node: TaskNode
-): AgentSessionOptions['onEvent'] {
+function createWorkerOnEvent(parentSession: AgentSession, node: TaskNode): AgentSessionOptions['onEvent'] {
+  let previousTokenUsage = {prompt: 0, completion: 0, total: 0};
+
   return (event: AgentEvent) => {
     switch (event.type) {
       case 'status':
       case 'thinking_delta':
       case 'thinking_end':
       case 'tool_end':
-      case 'token_usage':
-        onEvent(event);
+        parentSession.events.emit(event);
         break;
+      case 'token_usage': {
+        const delta = {
+          prompt: Math.max(0, event.usage.prompt - previousTokenUsage.prompt),
+          completion: Math.max(0, event.usage.completion - previousTokenUsage.completion),
+          total: Math.max(0, event.usage.total - previousTokenUsage.total),
+          contextUsed: event.usage.contextUsed,
+          contextLimit: event.usage.contextLimit
+        };
+        previousTokenUsage = event.usage;
+        parentSession.events.recordTokenUsage(delta);
+        break;
+      }
       case 'thinking_start':
-        onEvent(event);
-        onEvent({type: 'thinking_delta', delta: `[${node.id}]\n`});
+        parentSession.events.emit(event);
+        parentSession.events.emit({type: 'thinking_delta', delta: `[${node.id}]\n`});
         break;
       case 'tool_start':
-        onEvent({
+        parentSession.events.emit({
           type: 'tool_start',
           call: {...event.call, name: `${node.id}:${event.call.name}`}
         });
@@ -121,9 +131,10 @@ export class DagWorker {
     const session = new AgentSession(
       this.parentSession.createChildOptions({
         maxSteps: this.maxSteps,
-        onEvent: createWorkerOnEvent((event) => this.parentSession.events.emit(event), this.node)
+        onEvent: createWorkerOnEvent(this.parentSession, this.node)
       })
     );
+    session.setTurnSignal(this.parentSession.turnSignal());
 
     session.conversation.messages.splice(0, session.conversation.messages.length);
     session.conversation.messages.push(
@@ -133,6 +144,10 @@ export class DagWorker {
       ),
       {role: 'system', content: `Worker 节点：${this.node.id}（${this.node.kind}）`}
     );
+
+    for (const skillPrompt of this.parentSession.skills.loadedPromptNotes()) {
+      session.conversation.messages.push({role: 'system', content: skillPrompt});
+    }
 
     const upstream = buildUpstreamContext(this.node, this.blackboard);
     if (upstream) {

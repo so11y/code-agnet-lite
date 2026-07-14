@@ -30,20 +30,30 @@ function abortPromise(signal?: AbortSignal): Promise<never> | undefined {
 }
 
 export async function withTimeout<T>(
-  operation: Promise<T>,
+  operation: Promise<T> | ((signal: AbortSignal) => Promise<T>),
   timeoutMs = 60_000,
   signal?: AbortSignal
 ): Promise<T> {
   throwIfAborted(signal);
 
+  const operationController = new AbortController();
+  const abortOperation = () => operationController.abort(signal?.reason);
+  signal?.addEventListener('abort', abortOperation, {once: true});
+
   let timer: NodeJS.Timeout | undefined;
 
   try {
-    const racers: Array<Promise<T | never>> = [operation];
+    const pending =
+      typeof operation === 'function' ? operation(operationController.signal) : operation;
+    const racers: Array<Promise<T | never>> = [pending];
 
     racers.push(
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms.`)), timeoutMs);
+        timer = setTimeout(() => {
+          const error = new Error(`Timed out after ${timeoutMs}ms.`);
+          reject(error);
+          operationController.abort(error);
+        }, timeoutMs);
       })
     );
 
@@ -57,5 +67,6 @@ export async function withTimeout<T>(
     if (timer) {
       clearTimeout(timer);
     }
+    signal?.removeEventListener('abort', abortOperation);
   }
 }

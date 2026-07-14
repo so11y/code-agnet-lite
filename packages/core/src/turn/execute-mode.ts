@@ -4,6 +4,12 @@ import type {AgentSession} from '../session.js';
 import type {ReasoningMode} from '../session-types.js';
 import {runTotTurnWithRetries} from './tot-turn.js';
 
+function requireCompleted(result: {completed: boolean; steps: number}): void {
+  if (!result.completed) {
+    throw new Error(`Agent 未在 ${result.steps} 步内完成任务`);
+  }
+}
+
 export type ExecuteReasoningModeOptions = {
   agent?: CodeAgent;
   input?: string;
@@ -32,17 +38,18 @@ export async function executeReasoningMode(
   }
 
   if (mode === 'react') {
-    await agent.run();
+    requireCompleted(await agent.run());
     return;
   }
 
   if (mode === 'tot') {
     if (supportsToolLoop(agent)) {
-      await runTotTurnWithRetries(session, agent);
+      const result = await runTotTurnWithRetries(session, agent);
+      requireCompleted(result.run);
       return;
     }
 
     session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
-    await agent.run();
+    requireCompleted(await agent.run());
   }
 }

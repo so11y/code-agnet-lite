@@ -31,7 +31,7 @@ CLI runTurn
           router     选择 react | tot | dag
           provider   创建 CodeAgent (openai / cursor)
           mode       按路由执行 react / tot / dag
-          verify     可选验证
+          verify     ReAct/ToT 可选验证；DAG 成功使用图内 verify，失败后按实际 operations 判断是否补验
   → 出错: abort 在 core 处理；其它错误 throw 给 CLI
 ```
 
@@ -67,6 +67,7 @@ DAG 的 `dag_snapshot` / `task_start` / `task_end` 也统一通过 `session.even
 ### ConversationStore 补充
 
 - Skill 目录通过 `skillCatalogMessageIndex_` / `skillCatalogCwd_` 原地更新一条 system 消息，避免重复堆积
+- 切换 workspace 时原地更新“当前工作区”消息，移除旧 workspace 已加载的 Skill 正文
 - `finishTool`：写 tool message + 通知 EventBus
 
 ---
@@ -85,6 +86,7 @@ execute       → load_skill → ensureLoaded → inject（OpenAI 模式）
 - IO / 文案：`packages/tools/src/skills/`
 - 主 Agent 自决是否调 `load_skill`；无 Skill Resolver
 - Cursor 模式：`cursor-code-agent` 将 Catalog + 已 inject 正文拼进 SDK prompt
+- DAG Planner / Worker / Merge 继承父 Session 已加载的 Skill 正文
 
 ---
 
@@ -109,7 +111,7 @@ execute       → load_skill → ensureLoaded → inject（OpenAI 模式）
 
 **假设 vs 事实**：`hypotheses` 是 Planner 给出的待验证方向，经 ReAct 实验后由复盘提炼为 `facts` 或归入 `rejected`。ReAct 模式不主动维护 hypotheses，但字段仍存在。
 
-### 单轮操作 TurnOperations（`TurnLedger.turnOps`）
+### 单轮操作 TurnOperations（`TurnLedger.state.operations`）
 
 每轮 `beginTurn` 时清空，记录本轮副作用，不跨轮累计：
 
@@ -135,7 +137,7 @@ execute       → load_skill → ensureLoaded → inject（OpenAI 模式）
 
 ### DAG Blackboard（`dag/dag-model.ts`）
 
-多 Agent 模式下，Orchestrator 的 `Blackboard` 继承 `BaseMemory`，通过 `mergeNodeOutput` 合并各 Worker 的 `TaskOutput`（含 `facts`、`visitedFiles`、`searchedTerms`、`operations`）。Worker 各自维护独立 `SessionState`，不共享 Orchestrator 的全量 `visitedFiles`。
+多 Agent 模式下，Orchestrator 的 `Blackboard` 继承 `BaseMemory`，通过 `mergeNodeOutput` 合并各 Worker 的 `TaskOutput`（含 `facts`、`visitedFiles`、`searchedTerms`、`operations`）。Worker 各自维护独立 `SessionState`，不共享 Orchestrator 的全量 `visitedFiles`；DAG 无论成功、失败或抛出异常，已发生的 Blackboard memory 都会合回父 `TurnLedger`。
 
 ---
 
@@ -232,6 +234,8 @@ skillCatalog → prepare → router → provider → mode → verify
 
 Session 级：`skillCatalogPlugin` 在 `sessionReady` / `workspaceChange` 挂 Catalog。
 
+`verifyPlugin` 对 ReAct/ToT 正常执行；DAG 成功依赖图内 verify，DAG 失败则根据已回写的 operations 决定是否补充验证。
+
 扩展方式：自定义 `session.options.plugins` 替换整条链，或仿 builtins 增删 plugin。`react/tot/dag` 已合并为 `modePlugin`。
 
 Plugin 以工厂函数返回 plain object（`AgentPlugin`），不是 class。
@@ -247,6 +251,8 @@ Plugin 以工厂函数返回 plain object（`AgentPlugin`），不是 class。
 | CLI 展示 | `updateStatus('error')` + 聊天区 assistant 消息 |
 
 **约定：** core 不替 CLI 决定如何展示业务错误；`error` 状态不算 busy，输入框可继续使用。
+
+父 Turn 的 `AbortSignal` 会传给 DAG Worker、OpenAI 流式/非流式请求、工具和自动验证命令；工具达到 timeout 时同时中止底层操作。
 
 ---
 

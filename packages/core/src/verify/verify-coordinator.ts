@@ -23,7 +23,10 @@ import {
 } from './types.js';
 
 export class VerifyCoordinator {
-  constructor(private readonly cwd: string) {}
+  constructor(
+    private readonly cwd: string,
+    private readonly signal?: AbortSignal
+  ) {}
 
   async discover(): Promise<string[]> {
     return discoverVerifyCommands(this.cwd);
@@ -36,7 +39,7 @@ export class VerifyCoordinator {
       return [];
     }
 
-    return runAllVerify(this.cwd, resolved);
+    return runAllVerify(this.cwd, resolved, this.signal);
   }
 
   async runNodeVerify(node: TaskNode): Promise<TaskOutput> {

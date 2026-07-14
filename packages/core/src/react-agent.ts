@@ -125,19 +125,20 @@ export abstract class ReActAgent {
     try {
       const {output, display} = normalizeToolResult(
         await withTimeout(
-          tool.execute(parsed.data, {
-            cwd: this.session.cwd,
-            setCwd: (cwd) => this.session.setWorkspace(cwd),
-            signal: this.session.turnSignal(),
-            ensureSkillLoaded: async (name) => {
-              const outcome = await this.session.skills.ensureLoaded(this.session.cwd, name);
-              if (!outcome) {
-                return this.session.skills.registry.formatNotFound(name);
-              }
+          (signal) =>
+            tool.execute(parsed.data, {
+              cwd: this.session.cwd,
+              setCwd: (cwd) => this.session.setWorkspace(cwd),
+              signal,
+              ensureSkillLoaded: async (name) => {
+                const outcome = await this.session.skills.ensureLoaded(this.session.cwd, name);
+                if (!outcome) {
+                  return this.session.skills.registry.formatNotFound(name);
+                }
 
-              return formatSkillLoadResult(outcome.skill.name, outcome.injected);
-            }
-          }),
+                return formatSkillLoadResult(outcome.skill.name, outcome.injected);
+              }
+            }),
           this.toolTimeoutMs(),
           this.session.turnSignal()
         )

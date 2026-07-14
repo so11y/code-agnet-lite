@@ -51,7 +51,22 @@ export function verifyPlugin(): AgentPlugin {
         return;
       }
 
-      if (ctx.route?.mode === 'dag' && ctx.meta.get('dagSucceeded') === false) {
+      if (ctx.route?.mode === 'dag') {
+        if (ctx.meta.get('dagSucceeded') === true) {
+          return;
+        }
+
+        const operations = ctx.session.ledger.refreshOperations();
+        const hasSideEffects =
+          operations.writtenFiles.length > 0 ||
+          operations.deletedFiles.length > 0 ||
+          operations.executedCommands.length > 0;
+        if (!hasSideEffects) {
+          return;
+        }
+
+        await runPostTurnVerify(ctx.agent, ctx.session);
+        ctx.session.events.status('error', 'DAG 未完整完成（已检查副作用）');
         return;
       }
 

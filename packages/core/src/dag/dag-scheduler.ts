@@ -114,7 +114,10 @@ export class DagScheduler {
           this.options.workerMaxSteps
         ).run();
       case 'verify':
-        return new VerifyCoordinator(this.context.session.cwd).runNodeVerify(node);
+        return new VerifyCoordinator(
+          this.context.session.cwd,
+          this.context.session.turnSignal()
+        ).runNodeVerify(node);
       case 'merge':
         return runMergeNode(
           this.context.blackboard,

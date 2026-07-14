@@ -60,6 +60,32 @@ describe('Skills.ensureLoaded', () => {
     expect(outcome).toBeUndefined();
     expect(session.skills.listLoaded()).toEqual([]);
   });
+
+  it('clears loaded state and injected prompt when workspace changes', async () => {
+    const registry = mockRegistry({
+      load: async (cwd, name) => ({
+        name,
+        dirName: name,
+        description: 'workspace skill',
+        body: `body:${cwd}`,
+        path: `${cwd}/SKILL.md`
+      })
+    });
+    const session = createSession(registry);
+
+    await session.skills.ensureLoaded('/a', 'minimal-code');
+    session.skills.resetWorkspace();
+    const outcome = await session.skills.ensureLoaded('/b', 'minimal-code');
+
+    expect(outcome?.injected).toBe(true);
+    expect(session.skills.listLoaded()).toEqual(['minimal-code']);
+    const skillMessages = session.conversation.messages.filter(
+      (message) => message.role === 'system' && String(message.content).startsWith('[Skill:')
+    );
+    expect(skillMessages).toHaveLength(1);
+    expect(String(skillMessages[0].content)).toContain('body:/b');
+    expect(String(skillMessages[0].content)).not.toContain('body:/a');
+  });
 });
 
 describe('prepareTurn /skill', () => {

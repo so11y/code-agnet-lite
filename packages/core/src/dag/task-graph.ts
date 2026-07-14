@@ -137,6 +137,26 @@ export class TaskGraph {
     return cycle?.length ? [...cycle, cycle[0]] : undefined;
   }
 
+  private hasPath(from: string, to: string): boolean {
+    const visited = new Set<string>();
+    const queue = [from];
+
+    while (queue.length) {
+      const current = queue.shift()!;
+      if (current === to) {
+        return true;
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+
+      visited.add(current);
+      queue.push(...this.edges.filter((edge) => edge.from === current).map((edge) => edge.to));
+    }
+
+    return false;
+  }
+
   replaceSubgraph(plan: DagSubgraphPlan): void {
     const nodes = new Map(this.nodes);
     for (const task of plan.tasks) {
@@ -194,6 +214,28 @@ export class TaskGraph {
     const cycle = this.cycle();
     if (cycle) {
       throw new Error(`${label}存在环：${cycle.join(' → ')}`);
+    }
+
+    const merge = this.mergeNode()!;
+    if (this.edges.some((edge) => edge.from === merge.id)) {
+      throw new Error(`${label}的 merge 节点必须是终点`);
+    }
+
+    const disconnected = [...this.nodes.values()].find(
+      (node) => node.id !== merge.id && !this.hasPath(node.id, merge.id)
+    );
+    if (disconnected) {
+      throw new Error(`${label}任务 ${disconnected.id} 无法汇入 merge 节点`);
+    }
+
+    const verifyNodes = [...this.nodes.values()].filter((node) => node.kind === 'verify');
+    const unverifiedEdit = [...this.nodes.values()].find(
+      (node) =>
+        node.kind === 'edit' &&
+        !verifyNodes.some((verify) => this.hasPath(node.id, verify.id))
+    );
+    if (unverifiedEdit) {
+      throw new Error(`${label}的 edit 任务 ${unverifiedEdit.id} 之后必须存在 verify 节点`);
     }
   }
 }

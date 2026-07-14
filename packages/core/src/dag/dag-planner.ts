@@ -26,10 +26,18 @@ type SubgraphReplanContext = {
 
 export async function llmPlanDag(input: string, session: AgentSession): Promise<TaskGraph> {
   session.events.status('thinking', 'DAG 规划');
+  const skillPrompts = session.skills.loadedPromptNotes();
 
   const plan = await callStructuredLlmOrThrow({
     messages: [
-      {role: 'system', content: `${DAG_PLAN_PROMPT}\n\n只返回 JSON，并符合以下 JSON Schema：\n${DAG_JSON_SCHEMA}`},
+      {
+        role: 'system',
+        content: [
+          DAG_PLAN_PROMPT,
+          ...skillPrompts,
+          `只返回 JSON，并符合以下 JSON Schema：\n${DAG_JSON_SCHEMA}`
+        ].join('\n\n')
+      },
       {
         role: 'user',
         content: formatTurnUserMessage(session.cwd, input)
@@ -48,12 +56,17 @@ export async function llmReplanSubgraph(
   context: SubgraphReplanContext
 ): Promise<DagSubgraphPlan> {
   session.events.status('thinking', 'DAG 链级重规划');
+  const skillPrompts = session.skills.loadedPromptNotes();
 
   const plan = await callStructuredLlmOrThrow({
     messages: [
       {
         role: 'system',
-        content: `${DAG_SUBGRAPH_REPLAN_PROMPT}\n\n只返回 JSON，并符合以下 JSON Schema：\n${DAG_SUBGRAPH_JSON_SCHEMA}`
+        content: [
+          DAG_SUBGRAPH_REPLAN_PROMPT,
+          ...skillPrompts,
+          `只返回 JSON，并符合以下 JSON Schema：\n${DAG_SUBGRAPH_JSON_SCHEMA}`
+        ].join('\n\n')
       },
       {
         role: 'user',

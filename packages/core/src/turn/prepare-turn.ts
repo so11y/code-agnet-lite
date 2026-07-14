@@ -15,7 +15,7 @@ export async function prepareTurn(session: AgentSession, input: string, cwd: str
     }
   }
 
-  session.ledger.beginTurn(parsed.cleanedInput);
+  session.beginTurn(parsed.cleanedInput);
   session.conversation.appendUser(parsed.cleanedInput, {emit: false});
   return parsed.cleanedInput;
 }

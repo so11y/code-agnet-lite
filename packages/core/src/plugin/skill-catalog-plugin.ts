@@ -10,7 +10,7 @@ export function skillCatalogPlugin(): AgentPlugin {
     },
 
     async workspaceChange(ctx) {
-      ctx.session.skills.invalidateCatalog();
+      ctx.session.skills.resetWorkspace();
       await ctx.session.skills.mountCatalog(ctx.cwd);
     }
   };

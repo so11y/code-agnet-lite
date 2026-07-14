@@ -1,6 +1,6 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {messageText} from '../openai-message.js';
-import {createWorkspaceSystemMessages} from '../prompt.js';
+import {createWorkspaceSystemMessages, formatWorkspaceContext} from '../prompt.js';
 import type {AgentMessage} from '../session-types.js';
 import type {SessionEventBus} from './event-bus.js';
 import type {FinishToolOptions} from './finish-tool-options.js';
@@ -13,6 +13,7 @@ const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMe
 
 export class ConversationStore {
   readonly messages: AgentMessage[];
+  private workspaceMessage_: AgentMessage;
   private skillCatalogMessageIndex_?: number;
   private skillCatalogCwd_?: string;
   private skillCatalogSyncedCwd_?: string;
@@ -22,6 +23,7 @@ export class ConversationStore {
     private readonly events: SessionEventBus
   ) {
     this.messages = createWorkspaceSystemMessages(cwd);
+    this.workspaceMessage_ = this.messages[1];
   }
 
   appendUser(content: string, options?: {emit?: boolean}) {
@@ -49,10 +51,34 @@ export class ConversationStore {
     this.commitAssistant(message, false);
   }
 
-  addSystemNote(content: string, options?: {emit?: boolean}) {
-    this.messages.push({role: 'system', content});
+  addSystemNote(content: string, options?: {emit?: boolean}): AgentMessage {
+    const message: AgentMessage = {role: 'system', content};
+    this.messages.push(message);
     if (options?.emit !== false) {
       this.events.say('system', content);
+    }
+    return message;
+  }
+
+  setWorkspace(cwd: string) {
+    const message: AgentMessage = {role: 'system', content: formatWorkspaceContext(cwd)};
+    const index = this.messages.indexOf(this.workspaceMessage_);
+
+    if (index >= 0) {
+      this.messages[index] = message;
+    } else {
+      this.messages.splice(1, 0, message);
+    }
+
+    this.workspaceMessage_ = message;
+  }
+
+  removeMessages(messages: readonly AgentMessage[]) {
+    const targets = new Set(messages);
+    for (let index = this.messages.length - 1; index >= 0; index -= 1) {
+      if (targets.has(this.messages[index])) {
+        this.messages.splice(index, 1);
+      }
     }
   }
 
