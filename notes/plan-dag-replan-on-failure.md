@@ -1,7 +1,7 @@
 # DAG 失败恢复：当前实现
 
 > 状态：已实现 Worker 重试与一次失败子图重规划。
-> 本文只描述当前行为；全图重规划、回滚和 ReAct fallback 不在范围内。
+> 本文只描述当前行为；计划中的 ReAct fallback 见 [plan-dag-react-fallback.md](plan-dag-react-fallback.md)。
 
 ## 恢复流程
 
@@ -55,7 +55,7 @@ MAX_SUBGRAPH_REPLANS = 1
 - 全图 replan。
 - 失败后清空成功节点重新执行。
 - 文件 rollback。
-- DAG 失败后自动切换 ReAct。
+- DAG 失败后自动切换 ReAct（后续方案见 [plan-dag-react-fallback.md](plan-dag-react-fallback.md)）。
 - 无限重试或无限重规划。
 - Planner 猜测文件路径并据此加锁。
 
