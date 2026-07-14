@@ -1,5 +1,5 @@
 import {isEmpty} from 'lodash-es';
-import type {Review} from '../planner-schemas.js';
+import type {PlanReview} from '../planner-schemas.js';
 import {llmPlan, llmReplan, updateStateFromRun} from '../planner.js';
 import type {CodeAgent} from '../code-agent.js';
 import type {AgentRunResult} from '../react-agent.js';
@@ -10,14 +10,14 @@ export const TOT_CONFIDENCE_TARGET = 0.9;
 
 export type TotTurnResult = {
   run: AgentRunResult;
-  review?: Review;
+  review?: PlanReview;
   directionCorrect: boolean;
   confidence: number;
 };
 
 export function shouldContinueTot(result: TotTurnResult): boolean {
   return !(
-    result.run.completed &&
+    result.run.reason === 'final_answer' &&
     result.directionCorrect &&
     result.confidence >= TOT_CONFIDENCE_TARGET
   );
@@ -39,7 +39,7 @@ export async function runTotTurn(session: AgentSession, agent: CodeAgent): Promi
   } catch (error) {
     await updateStateFromRun(
       session,
-      {completed: false, steps: 0, reason: 'max_steps'},
+      {steps: 0, reason: 'max_steps'},
       error,
       progressBefore
     );

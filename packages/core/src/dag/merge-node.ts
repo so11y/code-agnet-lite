@@ -1,8 +1,8 @@
 import type {AgentSession} from '../session.js';
-import {TaskOutput, type Blackboard} from './dag-model.js';
 import {extractAssistantText} from '../openai-message.js';
 import {openAiLlm} from '../provider/openai-provider.js';
 import {formatUserRequest} from '../prompt.js';
+import {TaskOutput, type Blackboard} from './dag-model.js';
 
 export async function runMergeNode(
   blackboard: Blackboard,

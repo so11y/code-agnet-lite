@@ -100,7 +100,13 @@ export function InputBox({
   const lines = value.split('\n');
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={disabled ? 'gray' : 'cyan'} paddingX={1} minWidth={40}>
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={disabled ? 'gray' : 'cyan'}
+      paddingX={1}
+      minWidth={40}
+    >
       <Text color="gray">输入 </Text>
       {disabled ? (
         <Text color="gray">正在处理… Ctrl+C 终止</Text>

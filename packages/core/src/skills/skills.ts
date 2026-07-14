@@ -8,10 +8,9 @@ export type EnsureLoadedResult = {
 };
 
 export class Skills {
-  private readonly loaded_ = new Set<string>();
-  private readonly loadedMessages_: AgentMessage[] = [];
-  private readonly loadedPrompts_: string[] = [];
-  private catalogItems_: SkillMeta[] = [];
+  private readonly loaded = new Map<string, string>();
+  private readonly loadedMessages: AgentMessage[] = [];
+  private catalogItems: SkillMeta[] = [];
 
   constructor(
     readonly registry: SkillRegistry,
@@ -19,20 +18,27 @@ export class Skills {
   ) {}
 
   listLoaded(): string[] {
-    return [...this.loaded_];
+    return [...this.loaded.keys()];
   }
 
   isLoaded(name: string): boolean {
     const query = name.trim().toLowerCase();
-    return [...this.loaded_].some((loaded) => loaded.toLowerCase() === query);
+    return [...this.loaded.keys()].some((loaded) => loaded.toLowerCase() === query);
   }
 
   listCatalog(): SkillMeta[] {
-    return this.catalogItems_;
+    return this.catalogItems;
   }
 
   loadedPromptNotes(): string[] {
-    return [...this.loadedPrompts_];
+    return [...this.loaded.values()];
+  }
+
+  inheritLoaded(source: Skills): void {
+    for (const [name, prompt] of source.loaded) {
+      this.loaded.set(name, prompt);
+      this.loadedMessages.push(this.conversation.addSystemNote(prompt, {emit: false}));
+    }
   }
 
   inject(skill: Skill): boolean {
@@ -41,9 +47,8 @@ export class Skills {
     }
 
     const prompt = this.registry.formatForPrompt(skill);
-    this.loaded_.add(skill.name);
-    this.loadedPrompts_.push(prompt);
-    this.loadedMessages_.push(this.conversation.addSystemNote(prompt, {emit: true}));
+    this.loaded.set(skill.name, prompt);
+    this.loadedMessages.push(this.conversation.addSystemNote(prompt, {emit: true}));
     return true;
   }
 
@@ -63,7 +68,7 @@ export class Skills {
     }
 
     const items = await this.registry.discover(cwd);
-    this.catalogItems_ = items;
+    this.catalogItems = items;
     const catalog = this.registry.formatCatalog(items);
 
     if (catalog) {
@@ -77,14 +82,13 @@ export class Skills {
 
   invalidateCatalog(): void {
     this.conversation.invalidateSkillCatalog();
-    this.catalogItems_ = [];
+    this.catalogItems = [];
   }
 
   resetWorkspace(): void {
     this.invalidateCatalog();
-    this.conversation.removeMessages(this.loadedMessages_);
-    this.loaded_.clear();
-    this.loadedMessages_.length = 0;
-    this.loadedPrompts_.length = 0;
+    this.conversation.removeMessages(this.loadedMessages);
+    this.loaded.clear();
+    this.loadedMessages.length = 0;
   }
 }

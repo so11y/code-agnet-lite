@@ -199,16 +199,18 @@ export class TaskGraph {
   }
 
   private validate(label: string): void {
-    for (const node of this.nodes.values()) {
+    const nodes = [...this.nodes.values()];
+
+    for (const node of nodes) {
       const unknown = node.dependsOn.find((id) => !this.nodes.has(id));
       if (unknown) {
         throw new Error(`${label}任务 ${node.id} 依赖未知节点：${unknown}`);
       }
     }
 
-    const mergeCount = [...this.nodes.values()].filter((node) => node.kind === 'merge').length;
-    if (mergeCount !== 1) {
-      throw new Error(`${label}必须包含恰好 1 个 merge 节点，当前为 ${mergeCount}`);
+    const mergeNodes = nodes.filter((node) => node.kind === 'merge');
+    if (mergeNodes.length !== 1) {
+      throw new Error(`${label}必须包含恰好 1 个 merge 节点，当前为 ${mergeNodes.length}`);
     }
 
     const cycle = this.cycle();
@@ -216,26 +218,27 @@ export class TaskGraph {
       throw new Error(`${label}存在环：${cycle.join(' → ')}`);
     }
 
-    const merge = this.mergeNode()!;
+    const merge = mergeNodes[0];
     if (this.edges.some((edge) => edge.from === merge.id)) {
       throw new Error(`${label}的 merge 节点必须是终点`);
     }
 
-    const disconnected = [...this.nodes.values()].find(
+    const disconnected = nodes.find(
       (node) => node.id !== merge.id && !this.hasPath(node.id, merge.id)
     );
     if (disconnected) {
       throw new Error(`${label}任务 ${disconnected.id} 无法汇入 merge 节点`);
     }
 
-    const verifyNodes = [...this.nodes.values()].filter((node) => node.kind === 'verify');
-    const unverifiedEdit = [...this.nodes.values()].find(
-      (node) =>
-        node.kind === 'edit' &&
-        !verifyNodes.some((verify) => this.hasPath(node.id, verify.id))
-    );
-    if (unverifiedEdit) {
-      throw new Error(`${label}的 edit 任务 ${unverifiedEdit.id} 之后必须存在 verify 节点`);
+    const exploreNodes = nodes.filter((node) => node.kind === 'explore');
+    const verifyNodes = nodes.filter((node) => node.kind === 'verify');
+    for (const edit of nodes.filter((node) => node.kind === 'edit')) {
+      if (!exploreNodes.some((explore) => this.hasPath(explore.id, edit.id))) {
+        throw new Error(`${label}的 edit 任务 ${edit.id} 必须依赖 explore 节点`);
+      }
+      if (!verifyNodes.some((verify) => this.hasPath(edit.id, verify.id))) {
+        throw new Error(`${label}的 edit 任务 ${edit.id} 之后必须存在 verify 节点`);
+      }
     }
   }
 }

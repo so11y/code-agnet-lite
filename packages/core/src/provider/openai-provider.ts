@@ -1,7 +1,8 @@
-import {sortBy} from 'lodash-es';
 import OpenAI from 'openai';
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import type {ChatCompletion} from 'openai/resources/chat/completions';
+import type {
+  ChatCompletion,
+  ChatCompletionAssistantMessageParam
+} from 'openai/resources/chat/completions';
 import type {AgentTool} from '@code-agent-lite/tools';
 import {createDefaultToolRegistry} from '../tool-registry.js';
 import {
@@ -178,7 +179,9 @@ export class OpenAiLlmProvider implements LlmProvider {
       options.session.events.recordTokenUsage(usage);
     }
 
-    const toolCalls = sortBy([...toolCallsByIndex.entries()], ([index]) => index).map(([, toolCall]) => ({
+    const toolCalls = [...toolCallsByIndex.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, toolCall]) => ({
         id: toolCall.id,
         type: 'function' as const,
         function: {

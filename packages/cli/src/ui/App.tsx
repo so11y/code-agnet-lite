@@ -1,7 +1,16 @@
 import path from 'node:path';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
-import {createTokenUsage, createDefaultSkillRegistry, isAgentBusy, type AgentEvent, type AgentStatus, type ChatItem, type SkillMeta, type TokenUsage} from '@code-agent-lite/core';
+import {
+  createDefaultSkillRegistry,
+  createTokenUsage,
+  isAgentBusy,
+  type AgentEvent,
+  type AgentStatus,
+  type ChatItem,
+  type SkillMeta,
+  type TokenUsage
+} from '@code-agent-lite/core';
 import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {formatError, isAbortError} from '@code-agent-lite/shared';
 import {handleSubmit} from '../services/submit-handler.js';

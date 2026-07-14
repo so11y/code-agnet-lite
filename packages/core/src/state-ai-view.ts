@@ -1,13 +1,12 @@
 import {difference, isEqual} from 'lodash-es';
 import type {SessionState} from './agent-memory.js';
-import type {TurnOperations} from './session-types.js';
 import {createEmptyTurnOperations} from './types/operations.js';
 
 export type InjectedSnapshot = Pick<
   SessionState,
   'facts' | 'hypotheses' | 'rejected' | 'confidence' | 'visitedFiles' | 'searchedTerms'
 > & {
-  turnOps: TurnOperations;
+  operations: SessionState['operations'];
 };
 
 export type StateDelta = {
@@ -34,11 +33,11 @@ export function createInjectedSnapshot(): InjectedSnapshot {
     confidence: 0,
     visitedFiles: [],
     searchedTerms: [],
-    turnOps: createEmptyTurnOperations()
+    operations: createEmptyTurnOperations()
   };
 }
 
-export function buildInjectedSnapshot(state: SessionState, turnOps: TurnOperations): InjectedSnapshot {
+export function buildInjectedSnapshot(state: SessionState): InjectedSnapshot {
   return {
     facts: [...state.facts],
     hypotheses: [...state.hypotheses],
@@ -46,10 +45,10 @@ export function buildInjectedSnapshot(state: SessionState, turnOps: TurnOperatio
     confidence: state.confidence,
     visitedFiles: [...state.visitedFiles],
     searchedTerms: [...state.searchedTerms],
-    turnOps: {
-      writtenFiles: [...turnOps.writtenFiles],
-      deletedFiles: [...turnOps.deletedFiles],
-      executedCommands: [...turnOps.executedCommands]
+    operations: {
+      writtenFiles: [...state.operations.writtenFiles],
+      deletedFiles: [...state.operations.deletedFiles],
+      executedCommands: [...state.operations.executedCommands]
     }
   };
 }
@@ -90,17 +89,20 @@ export function diffInjectedSnapshot(prev: InjectedSnapshot, next: InjectedSnaps
     delta.addedSearched = addedSearched;
   }
 
-  const addedWritten = diffTurnList(prev.turnOps.writtenFiles, next.turnOps.writtenFiles);
+  const addedWritten = diffTurnList(prev.operations.writtenFiles, next.operations.writtenFiles);
   if (addedWritten) {
     delta.addedWritten = addedWritten;
   }
 
-  const addedDeleted = diffTurnList(prev.turnOps.deletedFiles, next.turnOps.deletedFiles);
+  const addedDeleted = diffTurnList(prev.operations.deletedFiles, next.operations.deletedFiles);
   if (addedDeleted) {
     delta.addedDeleted = addedDeleted;
   }
 
-  const addedCommands = diffTurnList(prev.turnOps.executedCommands, next.turnOps.executedCommands);
+  const addedCommands = diffTurnList(
+    prev.operations.executedCommands,
+    next.operations.executedCommands
+  );
   if (addedCommands) {
     delta.addedCommands = addedCommands;
   }

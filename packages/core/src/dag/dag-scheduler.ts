@@ -1,12 +1,8 @@
-import type {AgentSession} from '../session.js';
 import {Semaphore} from 'async-mutex';
-import {runMergeNode} from './merge-node.js';
+import type {AgentSession} from '../session.js';
 import {VerifyCoordinator} from '../verify/verify-coordinator.js';
-import {
-  type Blackboard,
-  type TaskNode,
-  type TaskOutput
-} from './dag-model.js';
+import {type Blackboard, type TaskNode, type TaskOutput} from './dag-model.js';
+import {runMergeNode} from './merge-node.js';
 import {TaskGraph} from './task-graph.js';
 import {DagWorker} from './worker.js';
 

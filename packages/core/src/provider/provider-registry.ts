@@ -16,13 +16,13 @@ const providers: Record<AgentProviderKind, AgentProvider> = {
   openai: {
     kind: 'openai',
     provide(session) {
-      return new DefaultCodeAgent(session.options, session);
+      return new DefaultCodeAgent(session.config, session);
     }
   },
   cursor: {
     kind: 'cursor',
     provide(session) {
-      return new CursorCodeAgent(session.options, session);
+      return new CursorCodeAgent(session.config, session);
     },
     dispose(session) {
       return getCursorSessionPool().dispose(session);
@@ -45,11 +45,11 @@ export class AgentProviderRegistry {
   }
 
   provide(session: AgentSession): CodeAgent {
-    return this.resolve(session.options.provider).provide(session);
+    return this.resolve(session.config.provider).provide(session);
   }
 
   async dispose(session: AgentSession, kind?: AgentProviderKind): Promise<void> {
-    await this.resolve(kind ?? session.options.provider).dispose?.(session);
+    await this.resolve(kind ?? session.config.provider).dispose?.(session);
   }
 
   plugin(): AgentPlugin {
@@ -57,6 +57,9 @@ export class AgentProviderRegistry {
       name: 'provider',
       prepareAgent: (ctx) => {
         ctx.agent = this.provide(ctx.session);
+      },
+      sessionDispose: (ctx) => {
+        return this.dispose(ctx.session);
       }
     };
   }

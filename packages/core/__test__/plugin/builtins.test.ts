@@ -10,18 +10,18 @@ import {AgentSession} from '../../src/session.js';
 import type {PluginTurnContext} from '../../src/plugin/types.js';
 
 const agent: CodeAgent = {
-  run: async () => ({completed: true, steps: 1, reason: 'final_answer'})
+  run: async () => ({steps: 1, reason: 'final_answer'})
 };
 
-function context(dagSucceeded: boolean): PluginTurnContext {
+function context(succeeded: boolean): PluginTurnContext {
   const session = new AgentSession({cwd: '/project', onEvent() {}});
   return {
     session,
-    cwd: session.cwd,
+    targetCwd: session.cwd,
     input: 'work',
     route: {mode: 'dag', confidence: 1, reason: 'test'},
     agent,
-    meta: new Map([['dagSucceeded', dagSucceeded]])
+    execution: {mode: 'dag', succeeded}
   };
 }
 
@@ -42,7 +42,7 @@ describe('verifyPlugin DAG behavior', () => {
 
     await verifyPlugin().closeTurn?.(ctx);
 
-    expect(runPostTurnVerify).toHaveBeenCalledWith(agent, ctx.session);
+    expect(runPostTurnVerify).toHaveBeenCalledWith(agent, ctx.session, 'dag');
   });
 
   it('preserves the DAG error without calling the gate when no side effects occurred', async () => {

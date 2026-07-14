@@ -10,7 +10,7 @@ export function preparePlugin(): AgentPlugin {
   return {
     name: 'prepare',
     async transformInput(input, ctx) {
-      return prepareTurn(ctx.session, input, ctx.cwd);
+      return prepareTurn(ctx.session, input, ctx.targetCwd);
     }
   };
 }
@@ -34,10 +34,9 @@ export function modePlugin(): AgentPlugin {
         return;
       }
 
-      await executeReasoningMode(ctx.session, mode, {
+      ctx.execution = await executeReasoningMode(ctx.session, mode, {
         agent: ctx.agent,
-        input: ctx.input,
-        meta: ctx.meta
+        input: ctx.input
       });
     }
   };
@@ -47,16 +46,16 @@ export function verifyPlugin(): AgentPlugin {
   return {
     name: 'verify',
     async closeTurn(ctx) {
-      if (!ctx.agent) {
+      if (!ctx.agent || !ctx.execution) {
         return;
       }
 
-      if (ctx.route?.mode === 'dag') {
-        if (ctx.meta.get('dagSucceeded') === true) {
+      if (ctx.execution.mode === 'dag') {
+        if (ctx.execution.succeeded) {
           return;
         }
 
-        const operations = ctx.session.ledger.refreshOperations();
+        const operations = ctx.session.ledger.snapshotOperations();
         const hasSideEffects =
           operations.writtenFiles.length > 0 ||
           operations.deletedFiles.length > 0 ||
@@ -65,12 +64,12 @@ export function verifyPlugin(): AgentPlugin {
           return;
         }
 
-        await runPostTurnVerify(ctx.agent, ctx.session);
+        await runPostTurnVerify(ctx.agent, ctx.session, ctx.execution.mode);
         ctx.session.events.status('error', 'DAG 未完整完成（已检查副作用）');
         return;
       }
 
-      await runPostTurnVerify(ctx.agent, ctx.session);
+      await runPostTurnVerify(ctx.agent, ctx.session, ctx.execution.mode);
     }
   };
 }

@@ -11,6 +11,6 @@ export {runVerifyCommand, runAllVerify} from './verify-runner.js';
 export {
   buildFinalFailureReport,
   fallbackVerifyGate,
-  formatTurnSummaryForGate,
+  formatTurnRecordForGate,
   formatVerifyFailure
 } from './verify-report.js';

@@ -13,17 +13,24 @@ const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMe
 
 export class ConversationStore {
   readonly messages: AgentMessage[];
-  private workspaceMessage_: AgentMessage;
-  private skillCatalogMessageIndex_?: number;
-  private skillCatalogCwd_?: string;
-  private skillCatalogSyncedCwd_?: string;
+  private workspaceMessage: AgentMessage;
+  private skillCatalogMessageIndex?: number;
+  private skillCatalogCwd?: string;
+  private skillCatalogSyncedCwd?: string;
 
   constructor(
     cwd: string,
     private readonly events: SessionEventBus
   ) {
     this.messages = createWorkspaceSystemMessages(cwd);
-    this.workspaceMessage_ = this.messages[1];
+    this.workspaceMessage = this.messages[1];
+  }
+
+  resetWorkspace(cwd: string, leadingPrompt?: string) {
+    this.invalidateSkillCatalog();
+    this.messages.length = 0;
+    this.messages.push(...createWorkspaceSystemMessages(cwd, leadingPrompt));
+    this.workspaceMessage = this.messages[1];
   }
 
   appendUser(content: string, options?: {emit?: boolean}) {
@@ -62,7 +69,7 @@ export class ConversationStore {
 
   setWorkspace(cwd: string) {
     const message: AgentMessage = {role: 'system', content: formatWorkspaceContext(cwd)};
-    const index = this.messages.indexOf(this.workspaceMessage_);
+    const index = this.messages.indexOf(this.workspaceMessage);
 
     if (index >= 0) {
       this.messages[index] = message;
@@ -70,7 +77,7 @@ export class ConversationStore {
       this.messages.splice(1, 0, message);
     }
 
-    this.workspaceMessage_ = message;
+    this.workspaceMessage = message;
   }
 
   removeMessages(messages: readonly AgentMessage[]) {
@@ -88,44 +95,44 @@ export class ConversationStore {
   }
 
   setSkillCatalog(content: string, cwd: string) {
-    if (this.skillCatalogCwd_ === cwd && this.skillCatalogMessageIndex_ !== undefined) {
+    if (this.skillCatalogCwd === cwd && this.skillCatalogMessageIndex !== undefined) {
       return;
     }
 
     const message: AgentMessage = {role: 'system', content};
 
-    if (this.skillCatalogMessageIndex_ !== undefined) {
-      this.messages[this.skillCatalogMessageIndex_] = message;
+    if (this.skillCatalogMessageIndex !== undefined) {
+      this.messages[this.skillCatalogMessageIndex] = message;
     } else {
-      this.skillCatalogMessageIndex_ = this.messages.length;
+      this.skillCatalogMessageIndex = this.messages.length;
       this.messages.push(message);
     }
 
-    this.skillCatalogCwd_ = cwd;
+    this.skillCatalogCwd = cwd;
   }
 
   isSkillCatalogSynced(cwd: string): boolean {
-    return this.skillCatalogSyncedCwd_ === cwd;
+    return this.skillCatalogSyncedCwd === cwd;
   }
 
   markSkillCatalogSynced(cwd: string) {
-    this.skillCatalogSyncedCwd_ = cwd;
+    this.skillCatalogSyncedCwd = cwd;
   }
 
   invalidateSkillCatalog() {
     this.clearSkillCatalog();
-    this.skillCatalogSyncedCwd_ = undefined;
+    this.skillCatalogSyncedCwd = undefined;
   }
 
   clearSkillCatalog() {
-    if (this.skillCatalogMessageIndex_ === undefined) {
-      this.skillCatalogCwd_ = undefined;
+    if (this.skillCatalogMessageIndex === undefined) {
+      this.skillCatalogCwd = undefined;
       return;
     }
 
-    this.messages.splice(this.skillCatalogMessageIndex_, 1);
-    this.skillCatalogMessageIndex_ = undefined;
-    this.skillCatalogCwd_ = undefined;
+    this.messages.splice(this.skillCatalogMessageIndex, 1);
+    this.skillCatalogMessageIndex = undefined;
+    this.skillCatalogCwd = undefined;
   }
 
   extractLastAssistantText(): string {

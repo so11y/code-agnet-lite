@@ -6,74 +6,76 @@ import {
   resetTurnOperationsProjection,
   type StateDeltaProjectorState
 } from './state-delta-projector.js';
-
 import {
   type AgentMessage,
   type AgentSessionOptions,
-  type LlmOptions,
-  type ReasoningMode
+  type LlmOptions
 } from './session-types.js';
-
 import {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
-
 import {createDefaultSkillRegistry} from './skill-registry.js';
 import {Skills} from './skills/skills.js';
-
 import {ConversationStore} from './session/conversation-store.js';
-
 import {SessionEventBus} from './session/event-bus.js';
-
 import {TurnLedger} from './session/turn-ledger.js';
-
 import {PluginDriver} from './plugin/driver.js';
-
 import {defaultPlugins} from './plugin/builtins.js';
-
 import {createPluginSessionContext, HookStrategy, PluginHook} from './plugin/types.js';
+
+type ChildSessionOptions = {
+  maxSteps: number;
+  onEvent: AgentSessionOptions['onEvent'];
+  systemPrompt: string;
+  systemNotes?: string[];
+};
 
 export class AgentSession {
   static current: AgentSession | null = null;
 
-  reasoningMode?: ReasoningMode;
-
   readonly toolRegistry: ToolRegistry;
-
   readonly skills: Skills;
-
   readonly events: SessionEventBus;
-
   readonly conversation: ConversationStore;
-
   readonly ledger: TurnLedger;
+  readonly config: Readonly<Omit<AgentSessionOptions, 'cwd'>>;
 
   private readonly pluginDriver: PluginDriver;
+  private readonly stateProjector: StateDeltaProjectorState = createStateDeltaProjectorState();
+  private currentCwd: string;
+  private currentTurnSignal?: AbortSignal;
 
-  private readonly stateProjector_: StateDeltaProjectorState = createStateDeltaProjectorState();
-
-  private turnSignal_?: AbortSignal;
-
-  constructor(readonly options: AgentSessionOptions) {
+  constructor(options: AgentSessionOptions) {
+    const {cwd, ...config} = options;
+    this.currentCwd = cwd;
+    this.config = config;
     this.toolRegistry = options.tools ?? createDefaultToolRegistry();
-
     this.events = new SessionEventBus(options.onEvent);
-
-    this.conversation = new ConversationStore(options.cwd, this.events);
-
+    this.conversation = new ConversationStore(cwd, this.events);
     this.skills = new Skills(options.skills ?? createDefaultSkillRegistry(), this.conversation);
-
     this.ledger = new TurnLedger();
-
     this.pluginDriver = new PluginDriver(options.plugins ?? defaultPlugins());
   }
 
   get cwd(): string {
-    return this.options.cwd;
+    return this.currentCwd;
   }
 
-  createChildOptions(
-    overrides: Partial<Omit<AgentSessionOptions, 'cwd'>> = {}
-  ): AgentSessionOptions {
-    return {...this.options, ...overrides, cwd: this.cwd};
+  createChild(options: ChildSessionOptions): AgentSession {
+    const child = new AgentSession({
+      ...this.config,
+      cwd: this.cwd,
+      maxSteps: options.maxSteps,
+      onEvent: options.onEvent,
+      plugins: []
+    });
+    child.currentTurnSignal = this.currentTurnSignal;
+    child.conversation.resetWorkspace(child.cwd, options.systemPrompt);
+    child.skills.inheritLoaded(this.skills);
+
+    for (const note of options.systemNotes ?? []) {
+      child.conversation.addSystemNote(note, {emit: false});
+    }
+
+    return child;
   }
 
   static async open(options: AgentSessionOptions): Promise<AgentSession> {
@@ -93,10 +95,7 @@ export class AgentSession {
       return AgentSession.current;
     }
 
-    AgentSession.current = await AgentSession.open({
-      ...options,
-      plugins: options.plugins ?? defaultPlugins()
-    });
+    AgentSession.current = await AgentSession.open(options);
     return AgentSession.current;
   }
 
@@ -121,33 +120,32 @@ export class AgentSession {
   }
 
   setTurnSignal(signal?: AbortSignal) {
-    this.turnSignal_ = signal;
+    this.currentTurnSignal = signal;
   }
 
   turnSignal(): AbortSignal | undefined {
-    return this.turnSignal_;
+    return this.currentTurnSignal;
   }
 
   throwIfAborted() {
-    throwIfAborted(this.turnSignal_);
+    throwIfAborted(this.currentTurnSignal);
   }
 
   llmOptions(): LlmOptions {
-    return {session: this, signal: this.turnSignal_};
+    return {session: this, signal: this.currentTurnSignal};
   }
 
   flushStateDelta() {
     flushStateDelta(
-      this.stateProjector_,
+      this.stateProjector,
       this.ledger.state,
-      this.ledger.refreshOperations(),
       (content) => this.conversation.addSystemNote(content)
     );
   }
 
   beginTurn(userInput: string) {
     this.ledger.beginTurn(userInput);
-    resetTurnOperationsProjection(this.stateProjector_);
+    resetTurnOperationsProjection(this.stateProjector);
   }
 
   buildLlmMessages(): AgentMessage[] {
@@ -160,7 +158,10 @@ export class AgentSession {
     const target = cwd ?? this.cwd;
 
     if (target !== this.cwd) {
-      return this.changeWorkspace_(target);
+      this.conversation.resetWorkspace(target);
+      this.ledger.resetWorkspace();
+      Object.assign(this.stateProjector, createStateDeltaProjectorState());
+      return this.changeWorkspace(target);
     }
 
     return Promise.resolve(target);
@@ -171,20 +172,20 @@ export class AgentSession {
       return;
     }
 
-    await this.changeWorkspace_(cwd);
+    await this.changeWorkspace(cwd);
   }
 
-  private changeWorkspace_(cwd: string): Promise<string> {
+  private async changeWorkspace(cwd: string): Promise<string> {
     const prev = this.cwd;
-
-    this.options.cwd = cwd;
-
+    this.currentCwd = cwd;
     this.conversation.setWorkspace(cwd);
-
     this.events.setWorkspace(cwd);
-
-    return this.pluginDriver
-      .runHook(PluginHook.WorkspaceChange, HookStrategy.Void, createPluginSessionContext(this), prev)
-      .then(() => cwd);
+    await this.pluginDriver.runHook(
+      PluginHook.WorkspaceChange,
+      HookStrategy.Void,
+      createPluginSessionContext(this),
+      prev
+    );
+    return cwd;
   }
 }

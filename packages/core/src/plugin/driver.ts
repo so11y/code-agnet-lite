@@ -93,13 +93,15 @@ export class PluginDriver {
     )) as ReasoningRoute | undefined;
     if (route) {
       ctx.route = route;
-      session.reasoningMode = route.mode;
       session.events.say('system', `路由 → ${route.mode}：${route.reason}`);
     }
 
     await this.runHook(PluginHook.PrepareAgent, HookStrategy.Void, ctx);
-    await this.runHook(PluginHook.Execute, HookStrategy.Void, ctx);
-    await this.runHook(PluginHook.CloseTurn, HookStrategy.Void, ctx);
+    try {
+      await this.runHook(PluginHook.Execute, HookStrategy.Void, ctx);
+    } finally {
+      await this.runHook(PluginHook.CloseTurn, HookStrategy.Void, ctx);
+    }
   }
 }
 

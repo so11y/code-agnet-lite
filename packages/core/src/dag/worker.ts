@@ -1,6 +1,6 @@
 import type {AgentTool} from '@code-agent-lite/tools';
 import {DefaultCodeAgent} from '../code-agent.js';
-import {SYSTEM_PROMPT, createWorkspaceSystemMessages} from '../prompt.js';
+import {SYSTEM_PROMPT} from '../prompt.js';
 import {AgentSession} from '../session.js';
 import type {AgentEvent, AgentSessionOptions} from '../session-types.js';
 import {TaskOutput, type Blackboard, type TaskNode} from './dag-model.js';
@@ -12,11 +12,12 @@ const WORKER_ROLE_PROMPT = `你正在作为 DAG Worker 执行单个子任务。
 只完成当前节点目标，不要扩展到无关工作。
 上游结论仅供参考，关键判断仍需用工具验证。`;
 
-const WORKER_RETRY_PROMPT = `上次执行未能成功完成。请检查当前工作区已有结果后继续完成同一目标；完成后必须输出明确的文字结论。`;
+const WORKER_RETRY_PROMPT =
+  '上次执行未能成功完成。请检查当前工作区已有结果后继续完成同一目标；完成后必须输出明确的文字结论。';
 
 class WorkerCodeAgent extends DefaultCodeAgent {
   constructor(
-    options: AgentSessionOptions,
+    options: Pick<AgentSessionOptions, 'maxSteps'>,
     session: AgentSession,
     private readonly readOnly: boolean
   ) {
@@ -40,7 +41,10 @@ function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
   return lines.length ? ['[upstream]', ...lines].join('\n') : '';
 }
 
-function createWorkerOnEvent(parentSession: AgentSession, node: TaskNode): AgentSessionOptions['onEvent'] {
+function createWorkerOnEvent(
+  parentSession: AgentSession,
+  node: TaskNode
+): AgentSessionOptions['onEvent'] {
   let previousTokenUsage = {prompt: 0, completion: 0, total: 0};
 
   return (event: AgentEvent) => {
@@ -94,7 +98,7 @@ export class DagWorker {
     for (let attempt = 0; attempt <= MAX_WORKER_RETRIES; attempt += 1) {
       const session = this.createSession();
       const agent = new WorkerCodeAgent(
-        session.options,
+        session.config,
         session,
         this.node.kind === 'explore'
       );
@@ -103,7 +107,7 @@ export class DagWorker {
 
       try {
         const result = await agent.run();
-        if (!result.completed) {
+        if (result.reason !== 'final_answer') {
           throw new Error(`Worker ${this.node.id} 未在 ${result.steps} 步内完成`);
         }
 
@@ -128,32 +132,17 @@ export class DagWorker {
   }
 
   private createSession(): AgentSession {
-    const session = new AgentSession(
-      this.parentSession.createChildOptions({
-        maxSteps: this.maxSteps,
-        onEvent: createWorkerOnEvent(this.parentSession, this.node)
-      })
-    );
-    session.setTurnSignal(this.parentSession.turnSignal());
-
-    session.conversation.messages.splice(0, session.conversation.messages.length);
-    session.conversation.messages.push(
-      ...createWorkspaceSystemMessages(
-        session.cwd,
-        `${SYSTEM_PROMPT}\n\n${WORKER_ROLE_PROMPT}`
-      ),
-      {role: 'system', content: `Worker 节点：${this.node.id}（${this.node.kind}）`}
-    );
-
-    for (const skillPrompt of this.parentSession.skills.loadedPromptNotes()) {
-      session.conversation.messages.push({role: 'system', content: skillPrompt});
-    }
-
+    const systemNotes = [`Worker 节点：${this.node.id}（${this.node.kind}）`];
     const upstream = buildUpstreamContext(this.node, this.blackboard);
     if (upstream) {
-      session.conversation.messages.push({role: 'system', content: upstream});
+      systemNotes.push(upstream);
     }
 
-    return session;
+    return this.parentSession.createChild({
+      maxSteps: this.maxSteps,
+      onEvent: createWorkerOnEvent(this.parentSession, this.node),
+      systemPrompt: `${SYSTEM_PROMPT}\n\n${WORKER_ROLE_PROMPT}`,
+      systemNotes
+    });
   }
 }

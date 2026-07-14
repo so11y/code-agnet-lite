@@ -16,7 +16,7 @@ function createCtx(input = 'hello', cwd = '/tmp'): PluginTurnContext {
     onEvent: (event) => events.push(event)
   });
 
-  return {session, cwd, input, meta: new Map()};
+  return {session, targetCwd: cwd, input};
 }
 
 describe('PluginDriver', () => {
@@ -28,7 +28,7 @@ describe('PluginDriver', () => {
         name: 'prepare',
         async transformInput(input, ctx) {
           order.push('transform');
-          ctx.meta.set('prepared', true);
+          expect(ctx.input).toBe('hello');
           return `${input}!`;
         }
       },
@@ -44,7 +44,7 @@ describe('PluginDriver', () => {
         prepareAgent(ctx) {
           order.push('prepareAgent');
           ctx.agent = {
-            run: async () => ({completed: true, steps: 1, reason: 'final_answer'})
+            run: async () => ({steps: 1, reason: 'final_answer'})
           };
         }
       },
@@ -53,8 +53,7 @@ describe('PluginDriver', () => {
         async execute(ctx) {
           order.push('execute');
           expect(ctx.input).toBe('hello!');
-          expect(ctx.meta.get('prepared')).toBe(true);
-          ctx.meta.set('dagSucceeded', true);
+          ctx.execution = {mode: 'dag', succeeded: true};
         }
       },
       {
@@ -69,7 +68,23 @@ describe('PluginDriver', () => {
     await new PluginDriver(plugins).run('hello', '/tmp', ctx.session);
 
     expect(order).toEqual(['transform', 'route', 'prepareAgent', 'execute', 'closeTurn']);
-    expect(ctx.session.reasoningMode).toBe('dag');
+  });
+
+  it('runs closeTurn when execute throws', async () => {
+    const closeTurn = vi.fn();
+    const session = new AgentSession({cwd: '/tmp', onEvent() {}});
+    const driver = new PluginDriver([
+      {
+        name: 'execute',
+        execute() {
+          throw new Error('boom');
+        }
+      },
+      {name: 'close', closeTurn}
+    ]);
+
+    await expect(driver.run('x', '/tmp', session)).rejects.toThrow('boom');
+    expect(closeTurn).toHaveBeenCalledOnce();
   });
 
   it('sorts enforce pre/post plugins', async () => {

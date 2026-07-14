@@ -1,12 +1,11 @@
 import {clamp} from 'lodash-es';
 import {extractAssistantText, formatSessionTranscript} from './openai-message.js';
 import {formatError, formatList, joinSections} from '@code-agent-lite/shared';
-import {type Plan, planSchema, type Review, reviewSchema} from './planner-schemas.js';
+import {type Plan, type PlanReview, planSchema, reviewSchema} from './planner-schemas.js';
 import {buildPlanPrompt, REVIEW_TOT_PROMPT} from './prompt.js';
 import type {AgentRunResult} from './react-agent.js';
 import type {AgentSession} from './session.js';
 import {callStructuredLlmWithHandler} from './structured-llm-caller.js';
-
 
 function formatPlan(title: string, plan: Plan): string {
   return joinSections(
@@ -19,7 +18,7 @@ function formatPlan(title: string, plan: Plan): string {
   );
 }
 
-function formatReview(review: Review, runFailed: boolean): string {
+function formatReview(review: PlanReview, runFailed: boolean): string {
   const needsCorrection = runFailed || !review.directionCorrect;
 
   return joinSections(
@@ -54,7 +53,11 @@ async function requestPlan(
       {role: 'system', content: buildPlanPrompt(mode)},
       {
         role: 'user',
-        content: joinSections(extraContext, formatStateContext(session), formatSessionTranscript(session.conversation.messages))
+        content: joinSections(
+          extraContext,
+          formatStateContext(session),
+          formatSessionTranscript(session.conversation.messages)
+        )
       }
     ],
     schema: planSchema,
@@ -94,16 +97,16 @@ export async function llmReplan(session: AgentSession) {
 }
 
 function formatRunOutcome(result: AgentRunResult, error?: unknown) {
+  const errorText = formatError(error);
   return joinSections(
-    `完成：${result.completed}`,
+    `结束原因：${result.reason}`,
     `步数：${result.steps}`,
-    `原因：${result.reason}`,
-    formatError(error) ? `错误：${formatError(error)}` : ''
+    errorText ? `错误：${errorText}` : ''
   );
 }
 
 function didRunFail(result: AgentRunResult, error?: unknown) {
-  return Boolean(error) || !result.completed;
+  return Boolean(error) || result.reason !== 'final_answer';
 }
 
 export async function updateStateFromRun(

@@ -4,8 +4,8 @@ import type {AgentSession} from '../session.js';
 import type {ReasoningMode} from '../session-types.js';
 import {runTotTurnWithRetries} from './tot-turn.js';
 
-function requireCompleted(result: {completed: boolean; steps: number}): void {
-  if (!result.completed) {
+function requireFinalAnswer(result: {reason: string; steps: number}): void {
+  if (result.reason !== 'final_answer') {
     throw new Error(`Agent 未在 ${result.steps} 步内完成任务`);
   }
 }
@@ -13,7 +13,11 @@ function requireCompleted(result: {completed: boolean; steps: number}): void {
 export type ExecuteReasoningModeOptions = {
   agent?: CodeAgent;
   input?: string;
-  meta?: Map<string, unknown>;
+};
+
+export type TurnExecution = {
+  mode: ReasoningMode;
+  succeeded: boolean;
 };
 
 /** modePlugin.execute 与 verify fix attempt 共用的 mode 执行入口。 */
@@ -21,35 +25,37 @@ export async function executeReasoningMode(
   session: AgentSession,
   mode: ReasoningMode,
   options: ExecuteReasoningModeOptions = {}
-): Promise<void> {
+): Promise<TurnExecution> {
   if (mode === 'dag') {
     if (!options.input) {
-      return;
+      throw new Error('DAG 模式缺少用户输入');
     }
 
     const succeeded = await runDagTurn(session, options.input);
-    options.meta?.set('dagSucceeded', succeeded);
-    return;
+    return {mode, succeeded};
   }
 
   const agent = options.agent;
   if (!agent) {
-    return;
+    throw new Error(`${mode} 模式缺少可执行 Agent`);
   }
 
   if (mode === 'react') {
-    requireCompleted(await agent.run());
-    return;
+    requireFinalAnswer(await agent.run());
+    return {mode, succeeded: true};
   }
 
   if (mode === 'tot') {
     if (supportsToolLoop(agent)) {
       const result = await runTotTurnWithRetries(session, agent);
-      requireCompleted(result.run);
-      return;
+      requireFinalAnswer(result.run);
+      return {mode, succeeded: true};
     }
 
     session.events.say('system', 'TOT 模式需要 OpenAI ReAct，当前 provider 已降级为 react。');
-    requireCompleted(await agent.run());
+    requireFinalAnswer(await agent.run());
+    return {mode, succeeded: true};
   }
+
+  throw new Error(`未知推理模式：${String(mode)}`);
 }

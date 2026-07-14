@@ -1,4 +1,7 @@
-import type {ChatCompletionAssistantMessageParam, ChatCompletionMessageToolCall} from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionAssistantMessageParam,
+  ChatCompletionMessageToolCall
+} from 'openai/resources/chat/completions';
 import {parseToolArgs} from './openai-message.js';
 import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
 import {formatError, normalizeToolResult, truncate, TurnAbortedError, withTimeout} from '@code-agent-lite/shared';
@@ -8,7 +11,6 @@ import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} 
 import type {AgentTool} from '@code-agent-lite/tools';
 
 export type AgentRunResult = {
-  completed: boolean;
   steps: number;
   reason: 'final_answer' | 'max_steps';
 };
@@ -17,7 +19,7 @@ export abstract class ReActAgent {
   protected readonly maxSteps: number;
   protected readonly session: AgentSession;
 
-  constructor(protected readonly options: AgentSessionOptions, session: AgentSession) {
+  constructor(options: Pick<AgentSessionOptions, 'maxSteps'>, session: AgentSession) {
     this.maxSteps = options.maxSteps ?? 20;
     this.session = session;
   }
@@ -76,7 +78,7 @@ export abstract class ReActAgent {
       this.session.conversation.commitAssistant(message, streamed);
 
       if (!message.tool_calls?.length) {
-        return {completed: true, steps: step, reason: 'final_answer'};
+        return {steps: step, reason: 'final_answer'};
       }
 
       for (const toolCall of message.tool_calls) {
@@ -85,7 +87,7 @@ export abstract class ReActAgent {
       }
     }
 
-    return {completed: false, steps: this.maxSteps, reason: 'max_steps'};
+    return {steps: this.maxSteps, reason: 'max_steps'};
   }
 
   protected abstract streamLlm(

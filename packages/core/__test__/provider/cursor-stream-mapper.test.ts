@@ -4,8 +4,7 @@ import {
   formatCursorToolOutput,
   mapCursorStreamEvent,
   shouldStartAssistantStream,
-  type CursorStreamMapperSink,
-  type CursorSdkMessage
+  type CursorStreamMapperSink
 } from '../../src/provider/cursor-stream-mapper.js';
 import type {FinishToolOptions} from '../../src/session/finish-tool-options.js';
 import type {TokenUsage, ToolCallItem} from '../../src/session-types.js';
@@ -97,7 +96,13 @@ describe('mapCursorStreamEvent', () => {
     );
 
     expect(toolStarts).toEqual([]);
-    expect(toolEnds).toEqual([{id: 'call-1', output: 'file content', options: {toolName: 'read_file', toolInput: {path: 'a.ts'}}}]);
+    expect(toolEnds).toEqual([
+      {
+        id: 'call-1',
+        output: 'file content',
+        options: {toolName: 'read_file', toolInput: {path: 'a.ts'}}
+      }
+    ]);
     expect(openTools.has('call-1')).toBe(false);
   });
 

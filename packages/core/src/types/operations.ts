@@ -10,7 +10,7 @@ export function createEmptyTurnOperations(): TurnOperations {
   return {writtenFiles: [], deletedFiles: [], executedCommands: []};
 }
 
-export type TurnSummary = {
+export type TurnRecord = {
   userInput: string;
   operations: TurnOperations;
   assistantText: string;
@@ -23,6 +23,6 @@ export const verifyGateSchema = z.object({
 
 export type VerifyGate = z.infer<typeof verifyGateSchema>;
 
-export type TurnReview = TurnSummary & {
+export type TurnVerification = TurnRecord & {
   gate: VerifyGate;
 };

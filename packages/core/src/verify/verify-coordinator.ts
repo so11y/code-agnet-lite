@@ -2,7 +2,7 @@ import {llmReplan} from '../planner.js';
 import {VERIFY_GATE_PROMPT} from '../prompt.js';
 import type {CodeAgent} from '../code-agent.js';
 import type {AgentSession} from '../session.js';
-import type {ReasoningMode, TurnReview} from '../session-types.js';
+import type {ReasoningMode, TurnVerification} from '../session-types.js';
 import {executeReasoningMode} from '../turn/execute-mode.js';
 import {callStructuredLlm} from '../structured-llm-caller.js';
 import {TaskOutput, type TaskNode} from '../dag/dag-model.js';
@@ -11,7 +11,7 @@ import {discoverVerifyCommands} from './verify-discovery.js';
 import {
   buildFinalFailureReport,
   fallbackVerifyGate,
-  formatTurnSummaryForGate,
+  formatTurnRecordForGate,
   formatVerifyFailure
 } from './verify-report.js';
 import {runAllVerify} from './verify-runner.js';
@@ -66,28 +66,28 @@ export class VerifyCoordinator {
     throw new Error(`验证节点 ${node.id} 失败\n\n${formatVerifyFailure(failures, 1)}`);
   }
 
-  static async judgeGate(session: AgentSession): Promise<TurnReview> {
-    const summary = session.ledger.collectTurnSummary(session.conversation.extractLastAssistantText());
+  static async judgeGate(session: AgentSession): Promise<TurnVerification> {
+    const record = session.ledger.collectTurnRecord(session.conversation.extractLastAssistantText());
     session.events.status('thinking', '验证门禁');
 
     const gate = await callStructuredLlm({
       messages: [
         {role: 'system', content: VERIFY_GATE_PROMPT},
-        {role: 'user', content: formatTurnSummaryForGate(summary)}
+        {role: 'user', content: formatTurnRecordForGate(record)}
       ],
       schema: verifyGateSchema,
       llmOptions: session.llmOptions(),
-      fallback: fallbackVerifyGate(summary)
+      fallback: fallbackVerifyGate(record)
     });
 
-    return {...summary, gate};
+    return {...record, gate};
   }
 
   async runFixLoop(
     agent: CodeAgent,
     session: AgentSession,
-    review: TurnReview,
-    reasoningMode?: ReasoningMode
+    verification: TurnVerification,
+    mode?: ReasoningMode
   ): Promise<void> {
     const commands = await this.discover();
 
@@ -97,7 +97,7 @@ export class VerifyCoordinator {
         [
           '## 无法自动验证',
           '',
-          `触发原因：${review.gate.reason}`,
+          `触发原因：${verification.gate.reason}`,
           '',
           '当前工作区未找到可用的验证命令（如 npm test、npm run typecheck 或 tsconfig.json）。',
           '已跳过自动验证，请手动确认改动是否正确。'
@@ -132,8 +132,8 @@ export class VerifyCoordinator {
           failures,
           fixRounds: MAX_FIX_ROUNDS,
           replans,
-          operations: session.ledger.refreshOperations(),
-          gate: review.gate
+          operations: session.ledger.snapshotOperations(),
+          gate: verification.gate
         });
         session.events.status('error', '验证未通过，已达最大尝试次数');
         session.events.say('system', report);
@@ -147,13 +147,13 @@ export class VerifyCoordinator {
         session.conversation.appendUser(
           `${formatVerifyFailure(failures, MAX_FIX_ROUNDS)}\n\n先前修复方向可能不对，已换思路，请重新尝试。`
         );
-        await this.runFixAttempt(session, agent, reasoningMode);
+        await this.runFixAttempt(session, agent, mode);
         fixRound += 1;
         continue;
       }
 
       session.conversation.appendUser(formatVerifyFailure(failures, fixRound + 1));
-      await this.runFixAttempt(session, agent, reasoningMode);
+      await this.runFixAttempt(session, agent, mode);
       fixRound += 1;
     }
   }
@@ -161,9 +161,8 @@ export class VerifyCoordinator {
   private async runFixAttempt(
     session: AgentSession,
     agent: CodeAgent,
-    reasoningMode?: ReasoningMode
+    mode?: ReasoningMode
   ): Promise<void> {
-    const mode = reasoningMode === 'tot' ? 'tot' : 'react';
-    await executeReasoningMode(session, mode, {agent});
+    await executeReasoningMode(session, mode === 'tot' ? 'tot' : 'react', {agent});
   }
 }

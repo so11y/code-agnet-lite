@@ -22,8 +22,6 @@ class DagOrchestrator {
   ) {}
 
   async run(): Promise<boolean> {
-    this.session.reasoningMode = 'dag';
-
     try {
       this.graph = await llmPlanDag(this.input, this.session);
       await new DagScheduler(this.graph, {

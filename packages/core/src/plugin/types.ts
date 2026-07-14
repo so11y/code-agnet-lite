@@ -1,20 +1,20 @@
 import type {CodeAgent} from '../code-agent.js';
 import type {ReasoningRoute} from '../router.js';
 import type {AgentSession} from '../session.js';
+import type {TurnExecution} from '../turn/execute-mode.js';
 
 export type PluginSessionContext = {
   session: AgentSession;
   cwd: string;
-  meta: Map<string, unknown>;
 };
 
 export type PluginTurnContext = {
   session: AgentSession;
-  cwd: string;
+  targetCwd: string;
   input: string;
   route?: ReasoningRoute;
   agent?: CodeAgent;
-  meta: Map<string, unknown>;
+  execution?: TurnExecution;
 };
 
 export enum PluginHook {
@@ -57,9 +57,9 @@ export type AgentPlugin = {
 };
 
 export function createPluginSessionContext(session: AgentSession): PluginSessionContext {
-  return {session, cwd: session.cwd, meta: new Map()};
+  return {session, cwd: session.cwd};
 }
 
 export function createPluginTurnContext(session: AgentSession, input: string, cwd: string): PluginTurnContext {
-  return {session, cwd, input, meta: new Map()};
+  return {session, targetCwd: cwd, input};
 }

@@ -91,14 +91,16 @@ describe('TaskGraph', () => {
   it('requires every edit path to pass through verification', () => {
     expect(() =>
       TaskGraph.fromPlan([
-        typedTask('edit', 'edit'),
+        typedTask('explore', 'explore'),
+        typedTask('edit', 'edit', ['explore']),
         typedTask('merge', 'merge', ['edit'])
       ])
     ).toThrow('edit 任务 edit 之后必须存在 verify 节点');
 
     expect(() =>
       TaskGraph.fromPlan([
-        typedTask('edit', 'edit'),
+        typedTask('explore', 'explore'),
+        typedTask('edit', 'edit', ['explore']),
         typedTask('verify', 'verify', ['edit']),
         typedTask('merge', 'merge', ['verify'])
       ])
@@ -107,7 +109,8 @@ describe('TaskGraph', () => {
 
   it('rejects recovery that removes verification after a completed edit', () => {
     const graph = TaskGraph.fromPlan([
-      typedTask('edit', 'edit'),
+      typedTask('explore', 'explore'),
+      typedTask('edit', 'edit', ['explore']),
       typedTask('verify', 'verify', ['edit']),
       typedTask('merge', 'merge', ['verify'])
     ]);
@@ -122,5 +125,15 @@ describe('TaskGraph', () => {
         ]
       })
     ).toThrow('edit 任务 edit 之后必须存在 verify 节点');
+  });
+
+  it('requires exploration before edits', () => {
+    expect(() =>
+      TaskGraph.fromPlan([
+        typedTask('edit', 'edit'),
+        typedTask('verify', 'verify', ['edit']),
+        typedTask('merge', 'merge', ['verify'])
+      ])
+    ).toThrow('edit 任务 edit 必须依赖 explore 节点');
   });
 });

@@ -26,7 +26,7 @@ export class CursorCodeAgent extends ReActAgent {
     const completedToolCalls: ChatCompletionMessageToolCall[] = [];
     let assistantStreamStarted = false;
 
-    const userInput = this.session.ledger.collectTurnSummary(
+    const userInput = this.session.ledger.collectTurnRecord(
       this.session.conversation.extractLastAssistantText()
     ).userInput;
     const prompt = buildCursorTurnPrompt(userInput, {
@@ -69,14 +69,20 @@ export class CursorCodeAgent extends ReActAgent {
     const toolCalls = completedToolCalls.length ? completedToolCalls : undefined;
 
     if (assistantStreamStarted) {
-      this.session.conversation.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, true);
+      this.session.conversation.commitAssistant(
+        {role: 'assistant', content: text || null, tool_calls: toolCalls},
+        true
+      );
     } else if (text || toolCalls) {
-      this.session.conversation.commitAssistant({role: 'assistant', content: text || null, tool_calls: toolCalls}, false);
-    } else if (result.status !== 'error') {
+      this.session.conversation.commitAssistant(
+        {role: 'assistant', content: text || null, tool_calls: toolCalls},
+        false
+      );
+    } else {
       this.session.events.say('assistant', '（Cursor Agent 未返回文本）');
     }
 
-    return {completed: true, steps: 1, reason: 'final_answer'};
+    return {steps: 1, reason: 'final_answer'};
   }
 
   private cursorStreamSink(completedToolCalls: ChatCompletionMessageToolCall[]): CursorStreamMapperSink {

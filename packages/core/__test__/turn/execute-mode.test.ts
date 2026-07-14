@@ -7,7 +7,7 @@ describe('executeReasoningMode', () => {
   it('rejects an incomplete ReAct run instead of continuing to verification', async () => {
     const session = new AgentSession({cwd: '/project', onEvent() {}});
     const agent: CodeAgent = {
-      run: async () => ({completed: false, steps: 20, reason: 'max_steps'})
+      run: async () => ({steps: 20, reason: 'max_steps'})
     };
 
     await expect(executeReasoningMode(session, 'react', {agent})).rejects.toThrow(

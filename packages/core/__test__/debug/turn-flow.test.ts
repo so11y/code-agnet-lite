@@ -57,7 +57,6 @@ describe('debug: core turn flow (defaultPlugins)', {timeout: 0}, () => {
       session
     );
 
-    expect(session.reasoningMode).toBe('react');
     expect(session.conversation.extractLastAssistantText()).toContain('debug: defaultPlugins agent 回复');
     expect(events.some((e) => e.type === 'status' && e.status === 'done')).toBe(true);
   });

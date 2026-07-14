@@ -1,7 +1,7 @@
 import {pickField} from '@code-agent-lite/shared';
 import {compact, union} from 'lodash-es';
 import {SessionState, type MemoryMergeSource} from '../agent-memory.js';
-import type {TurnOperations, TurnSummary} from '../session-types.js';
+import type {TurnOperations, TurnRecord} from '../session-types.js';
 import {createEmptyTurnOperations} from '../types/operations.js';
 
 type SessionListKey = 'visitedFiles' | 'searchedTerms';
@@ -31,6 +31,11 @@ const TURN_TOOL_TRACKS: Record<string, TurnToolTrack> = {
 export class TurnLedger {
   readonly state: SessionState = new SessionState();
   private turnUserInput = '';
+
+  resetWorkspace() {
+    Object.assign(this.state, new SessionState());
+    this.turnUserInput = '';
+  }
 
   beginTurn(userInput: string) {
     this.turnUserInput = userInput;
@@ -86,7 +91,7 @@ export class TurnLedger {
     this.state.mergeFrom(memory);
   }
 
-  refreshOperations(): TurnOperations {
+  snapshotOperations(): TurnOperations {
     return {
       writtenFiles: [...this.state.operations.writtenFiles],
       deletedFiles: [...this.state.operations.deletedFiles],
@@ -99,38 +104,32 @@ export class TurnLedger {
       facts: [...this.state.facts],
       visitedFiles: [...this.state.visitedFiles],
       searchedTerms: [...this.state.searchedTerms],
-      operations: this.refreshOperations()
+      operations: this.snapshotOperations()
     };
   }
 
-  collectTurnSummary(assistantText: string): TurnSummary {
+  collectTurnRecord(assistantText: string): TurnRecord {
     return {
       userInput: this.turnUserInput,
-      operations: this.refreshOperations(),
+      operations: this.snapshotOperations(),
       assistantText
     };
   }
 
-  snapshotProgress() {
-    return {
-      facts: this.state.facts.length,
-      visitedFiles: this.state.visitedFiles.length,
-      searchedTerms: this.state.searchedTerms.length
-    };
+  snapshotProgress(): number {
+    const {operations} = this.state;
+    return (
+      this.state.facts.length +
+      this.state.visitedFiles.length +
+      this.state.searchedTerms.length +
+      operations.writtenFiles.length +
+      operations.deletedFiles.length +
+      operations.executedCommands.length
+    );
   }
 
-  noteProgress(before: ReturnType<TurnLedger['snapshotProgress']>) {
-    const after = this.snapshotProgress();
-    const progressed =
-      after.facts > before.facts ||
-      after.visitedFiles > before.visitedFiles ||
-      after.searchedTerms > before.searchedTerms;
-
-    if (progressed) {
-      this.state.noProgress = 0;
-      return;
-    }
-
-    this.state.noProgress += 1;
+  noteProgress(before: number) {
+    this.state.noProgress =
+      this.snapshotProgress() > before ? 0 : this.state.noProgress + 1;
   }
 }

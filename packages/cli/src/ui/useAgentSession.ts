@@ -1,7 +1,6 @@
 import {useCallback, useEffect, useRef} from 'react';
 import {getAgentProviderKind} from '@code-agent-lite/platform';
 import {
-  agentProviders,
   AgentSession,
   runAgentTurn,
   type AgentEvent
@@ -27,13 +26,7 @@ export function useAgentSession({onEvent}: Options) {
   const clearSession = useCallback(async () => {
     abortRef.current?.abort();
     abortRef.current = null;
-
-    const session = AgentSession.current;
     await AgentSession.closeSingleton();
-
-    if (session) {
-      await agentProviders.dispose(session);
-    }
   }, []);
 
   useEffect(() => () => {

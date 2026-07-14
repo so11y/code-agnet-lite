@@ -15,7 +15,7 @@ export const planSchema = z.object({
     .describe('ReAct 执行器必须完成的验证项')
 });
 
-/** Review 输出：复盘结果（写入 session.ledger.state 的 facts / rejected / hypotheses） */
+/** PlanReview 输出：复盘结果（写入 session.ledger.state 的 facts / rejected / hypotheses） */
 export const reviewSchema = z.object({
   directionCorrect: z.boolean().describe('当前假设方向是否基本正确'),
   summary: z.string().describe('复盘摘要，需包含执行过程中实际发生了什么'),
@@ -39,7 +39,7 @@ export const reviewSchema = z.object({
 });
 
 export type Plan = z.infer<typeof planSchema>;
-export type Review = z.infer<typeof reviewSchema>;
+export type PlanReview = z.infer<typeof reviewSchema>;
 
 export function formatSchemaForPrompt(schema: z.ZodTypeAny): string {
   const jsonSchema = zodToJsonSchema(schema, {$refStrategy: 'none'});

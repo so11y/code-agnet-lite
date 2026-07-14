@@ -37,7 +37,12 @@ export function formatSkillCatalog(skills: SkillMeta[]): string | null {
     (skill) => `---\nname: ${skill.name}\ndescription: ${skill.description || '（无描述）'}\n---`
   );
 
-  return ['[Skill Catalog]', `以下为 Skill 索引（仅 name/description）。${SKILL_CATALOG_ACTIVATE_HINT}`, '', ...blocks].join('\n');
+  return [
+    '[Skill Catalog]',
+    `以下为 Skill 索引（仅 name/description）。${SKILL_CATALOG_ACTIVATE_HINT}`,
+    '',
+    ...blocks
+  ].join('\n');
 }
 
 export function formatSkillList(skills: SkillMeta[]): string {

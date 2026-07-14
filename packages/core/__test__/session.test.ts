@@ -2,14 +2,19 @@ import {describe, expect, it} from 'vitest';
 import {AgentSession} from '../src/session.js';
 
 describe('AgentSession cwd', () => {
-  it('keeps cwd and options.cwd as one source of truth', async () => {
+  it('keeps runtime cwd separate from immutable session config', async () => {
     const session = new AgentSession({cwd: '/old', onEvent() {}});
 
     await session.setWorkspace('/new');
 
     expect(session.cwd).toBe('/new');
-    expect(session.options.cwd).toBe('/new');
-    expect(session.createChildOptions({maxSteps: 5})).toMatchObject({cwd: '/new', maxSteps: 5});
+    const child = session.createChild({
+      maxSteps: 5,
+      onEvent() {},
+      systemPrompt: 'child'
+    });
+    expect(child.cwd).toBe('/new');
+    expect(child.config).toMatchObject({maxSteps: 5});
   });
 
   it('updates the workspace system message instead of leaving stale context', async () => {
@@ -21,6 +26,32 @@ describe('AgentSession cwd', () => {
       (message) => message.role === 'system' && String(message.content).startsWith('当前工作区：')
     );
     expect(workspaceMessages.map((message) => message.content)).toEqual(['当前工作区：/new']);
+  });
+
+  it('resets workspace-scoped conversation and memory before a new turn', async () => {
+    const session = new AgentSession({cwd: '/old', plugins: [], onEvent() {}});
+    session.conversation.appendUser('old task');
+    session.ledger.state.facts.push('old fact');
+    session.ledger.state.visitedFiles.push('src/old.ts');
+
+    await session.ensureWorkspace('/new');
+
+    expect(session.conversation.messages).toHaveLength(2);
+    expect(session.conversation.messages[1].content).toBe('当前工作区：/new');
+    expect(session.ledger.state.facts).toEqual([]);
+    expect(session.ledger.state.visitedFiles).toEqual([]);
+  });
+
+  it('preserves the active turn when a tool changes workspace', async () => {
+    const session = new AgentSession({cwd: '/old', plugins: [], onEvent() {}});
+    session.conversation.appendUser('current task');
+    session.ledger.state.facts.push('current fact');
+
+    await session.setWorkspace('/new');
+
+    expect(session.conversation.extractLastAssistantText()).toBe('');
+    expect(session.conversation.messages.some((message) => message.content === 'current task')).toBe(true);
+    expect(session.ledger.state.facts).toEqual(['current fact']);
   });
 });
 
@@ -47,5 +78,15 @@ describe('AgentSession turn state', () => {
     );
     expect(deltas).toHaveLength(2);
     expect(String(deltas[1].content)).toContain('+ written this turn: same.ts');
+  });
+
+  it('counts side effects as progress', () => {
+    const session = new AgentSession({cwd: '/project', onEvent() {}});
+    session.beginTurn('work');
+    const before = session.ledger.snapshotProgress();
+    session.ledger.recordToolCall('write_file', {path: 'changed.ts'});
+    session.ledger.noteProgress(before);
+
+    expect(session.ledger.state.noProgress).toBe(0);
   });
 });

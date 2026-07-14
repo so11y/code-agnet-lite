@@ -124,7 +124,7 @@ describe('DAG parent session integration', () => {
 
     await expect(runDagTurn(session, 'do work')).resolves.toBe(false);
 
-    expect(session.ledger.refreshOperations().writtenFiles).toEqual(['partial.ts']);
+    expect(session.ledger.snapshotOperations().writtenFiles).toEqual(['partial.ts']);
     expect(assistantMessages).toEqual([]);
   });
 });

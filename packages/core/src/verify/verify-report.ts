@@ -1,31 +1,31 @@
 import {compact} from 'lodash-es';
 import {formatOperationSection, formatVerifyFailureBlock, joinSections} from '@code-agent-lite/shared';
-import type {TurnOperations, TurnSummary, VerifyGate} from '../session-types.js';
+import type {TurnOperations, TurnRecord, VerifyGate} from '../session-types.js';
 import {formatUserRequest} from '../prompt.js';
 import type {VerifyResult} from './types.js';
 
-export function formatTurnSummaryForGate(summary: TurnSummary): string {
+export function formatTurnRecordForGate(record: TurnRecord): string {
   return joinSections(
-    formatUserRequest(summary.userInput),
-    formatOperationSection('write_file 写入的文件：', summary.operations.writtenFiles),
-    formatOperationSection('delete_file 删除的文件：', summary.operations.deletedFiles),
-    formatOperationSection('run_cmd 执行的命令：', summary.operations.executedCommands),
-    `Agent 最终回答：\n${summary.assistantText || '（无文本回答）'}`
+    formatUserRequest(record.userInput),
+    formatOperationSection('write_file 写入的文件：', record.operations.writtenFiles),
+    formatOperationSection('delete_file 删除的文件：', record.operations.deletedFiles),
+    formatOperationSection('run_cmd 执行的命令：', record.operations.executedCommands),
+    `Agent 最终回答：\n${record.assistantText || '（无文本回答）'}`
   );
 }
 
-export function fallbackVerifyGate(summary: TurnSummary): VerifyGate {
-  if (summary.operations.writtenFiles.length > 0) {
+export function fallbackVerifyGate(record: TurnRecord): VerifyGate {
+  if (record.operations.writtenFiles.length > 0) {
     return {
       shouldVerify: true,
-      reason: `本轮写入了 ${summary.operations.writtenFiles.length} 个文件（${summary.operations.writtenFiles.join('、')}）`
+      reason: `本轮写入了 ${record.operations.writtenFiles.length} 个文件（${record.operations.writtenFiles.join('、')}）`
     };
   }
 
-  if (summary.operations.deletedFiles.length > 0) {
+  if (record.operations.deletedFiles.length > 0) {
     return {
       shouldVerify: true,
-      reason: `本轮删除了 ${summary.operations.deletedFiles.length} 个文件（${summary.operations.deletedFiles.join('、')}）`
+      reason: `本轮删除了 ${record.operations.deletedFiles.length} 个文件（${record.operations.deletedFiles.join('、')}）`
     };
   }
 
