@@ -8,6 +8,6 @@ export const listSkillsTool = createTool({
   schema: z.object({}),
   async execute(_input, context) {
     const skills = await discoverSkills(context.cwd);
-    return formatSkillList(skills, context.cwd);
+    return formatSkillList(skills);
   }
 });

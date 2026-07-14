@@ -1,4 +1,3 @@
-import React from 'react';
 import {Box, Text} from 'ink';
 import {STATIC_COMMANDS} from './command-suggestions.js';
 

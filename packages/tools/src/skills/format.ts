@@ -40,7 +40,7 @@ export function formatSkillCatalog(skills: SkillMeta[]): string | null {
   return ['[Skill Catalog]', `以下为 Skill 索引（仅 name/description）。${SKILL_CATALOG_ACTIVATE_HINT}`, '', ...blocks].join('\n');
 }
 
-export function formatSkillList(skills: SkillMeta[], cwd: string): string {
+export function formatSkillList(skills: SkillMeta[]): string {
   if (!skills.length) {
     return `当前工作区未找到 Skill。可在 ${SKILLS_DIR}/<name>/SKILL.md 创建。`;
   }

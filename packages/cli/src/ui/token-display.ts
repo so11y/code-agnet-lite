@@ -1,4 +1,4 @@
-import type {AgentStatus, TokenUsage} from '@code-agent-lite/core';
+import type {TokenUsage} from '@code-agent-lite/core';
 import {getContextUsagePercent, isAgentBusy} from '@code-agent-lite/core';
 
 export {getContextUsagePercent, isAgentBusy};

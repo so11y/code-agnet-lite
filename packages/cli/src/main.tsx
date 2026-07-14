@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import React from 'react';
 import {render} from 'ink';
 import {loadDotEnv} from '@code-agent-lite/platform';
 import {App} from './ui/App.js';

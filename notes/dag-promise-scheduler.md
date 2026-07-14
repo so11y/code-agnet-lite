@@ -1,5 +1,7 @@
 # DAG 调度演进：Promise 图 + 资源 Context
 
+> 历史探索方案，未实施。当前行为以 `plan-dag-replan-on-failure.md` 和源码为准；资源锁方案已放弃。
+
 ## 背景
 
 当前实现（`dag-scheduler.ts`）采用 **ready-set 轮询**：

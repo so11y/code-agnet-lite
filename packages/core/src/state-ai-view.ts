@@ -25,7 +25,6 @@ export type StateDelta = {
 const ROLLUP_VISITED_THRESHOLD = 10;
 const ROLLUP_RECENT_COUNT = 5;
 const ROLLUP_EVERY_STEPS = 5;
-const EMPTY_TURN = '(无)';
 
 export function createInjectedSnapshot(): InjectedSnapshot {
   return {
@@ -119,10 +118,6 @@ export function diffInjectedSnapshot(prev: InjectedSnapshot, next: InjectedSnaps
   );
 
   return hasDelta ? delta : null;
-}
-
-function formatTurnList(label: string, items: string[]): string {
-  return `# ${label}: ${items.length ? items.join(', ') : EMPTY_TURN}`;
 }
 
 export function formatStateDelta(step: number, delta: StateDelta, internal: SessionState): string {

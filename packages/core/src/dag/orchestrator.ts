@@ -1,40 +1,92 @@
-import {filter, find} from 'lodash-es';
 import type {AgentSession} from '../session.js';
 import {formatError, joinSections} from '@code-agent-lite/shared';
-import {runDag} from './dag-scheduler.js';
-import {llmPlanDag} from './dag-planner.js';
-import {Blackboard} from './types.js';
+import {DagScheduler} from './dag-scheduler.js';
+import {llmPlanDag, llmReplanSubgraph} from './dag-planner.js';
+import {TaskGraph} from './task-graph.js';
+import {
+  Blackboard,
+  TASK_NODE_STATUS,
+  type TaskNode
+} from './dag-model.js';
 
-export async function runDagTurn(session: AgentSession, input: string): Promise<boolean> {
-  session.reasoningMode = 'dag';
+const MAX_SUBGRAPH_REPLANS = 1;
 
-  try {
-    const graph = await llmPlanDag(input, session);
-    const blackboard = new Blackboard();
+class DagOrchestrator {
+  private readonly blackboard = new Blackboard();
+  private graph!: TaskGraph;
+  private replanAttempts = 0;
 
-    await runDag(graph, {
-      session,
-      blackboard,
-      userInput: input
+  constructor(
+    private readonly session: AgentSession,
+    private readonly input: string
+  ) {}
+
+  async run(): Promise<boolean> {
+    this.session.reasoningMode = 'dag';
+
+    try {
+      this.graph = await llmPlanDag(this.input, this.session);
+      await new DagScheduler(this.graph, {
+        session: this.session,
+        blackboard: this.blackboard,
+        userInput: this.input,
+        tryRecoverFailures: (failed) => this.recover(failed)
+      }).run();
+      return this.finish();
+    } catch (error) {
+      const message = formatError(error);
+      this.session.events.status('error', message);
+      this.session.events.say('assistant', message);
+      throw error;
+    }
+  }
+
+  private async recover(failed: TaskNode[]): Promise<boolean> {
+    if (this.replanAttempts >= MAX_SUBGRAPH_REPLANS) {
+      return false;
+    }
+
+    this.session.throwIfAborted();
+    const replanSet = this.graph.replanSet(failed.map((node) => node.id));
+    const doneSummaries = Object.fromEntries(
+      this.graph
+        .externalDoneNodeIds(replanSet)
+        .map((id) => [id, this.blackboard.nodeOutputs.get(id)?.summary ?? ''])
+    );
+
+    this.session.events.say('system', `DAG 恢复：重规划节点 ${[...replanSet].join('、')}`);
+    const plan = await llmReplanSubgraph(this.input, this.session, {
+      replanSet: [...replanSet],
+      failedNodes: failed.map((node) => ({
+        id: node.id,
+        error: node.error,
+        partialOperations: this.blackboard.nodeOutputs.get(node.id)?.operations
+      })),
+      doneSummaries,
+      originalGraphSummary: this.graph.summary
     });
 
-    const nodes = [...graph.nodes.values()];
-    const mergeNode = find(nodes, {kind: 'merge'});
-    const failed = filter(nodes, {status: 'failed'});
-    const skipped = filter(nodes, {status: 'skipped'});
+    this.graph.replaceSubgraph(plan);
+    this.replanAttempts += 1;
+    return true;
+  }
 
-    if (mergeNode?.status === 'done' && mergeNode.output?.summary) {
-      session.ledger.mergeTurnOperations({
-        writtenFiles: [...blackboard.writtenFiles],
-        deletedFiles: [...blackboard.deletedFiles],
-        executedCommands: [...blackboard.executedCommands]
-      });
+  private finish(): boolean {
+    const mergeNode = this.graph.mergeNode();
+    if (mergeNode?.status === TASK_NODE_STATUS.DONE && mergeNode.output?.summary) {
+      this.session.ledger.mergeTurnOperations(this.blackboard.operations);
       return true;
     }
 
+    this.graph.pendingNodes().forEach((node) => node.skip());
+
+    this.session.events.emit({type: 'dag_snapshot', graph: this.graph.serialize()});
+    const failed = this.graph.failedNodes();
+    const skipped = this.graph.skippedNodes();
+
     if (failed.length > 0 || skipped.length > 0) {
-      session.events.status('error', 'DAG 未完整完成');
-      session.events.say(
+      this.session.events.status('error', 'DAG 未完整完成');
+      this.session.events.say(
         'system',
         joinSections(
           failed.length > 0
@@ -46,12 +98,11 @@ export async function runDagTurn(session: AgentSession, input: string): Promise<
       return false;
     }
 
-    session.events.status('error', 'DAG 未完成 merge 节点');
+    this.session.events.status('error', 'DAG 未完成 merge 节点');
     return false;
-  } catch (error) {
-    const message = formatError(error);
-    session.events.status('error', message);
-    session.events.say('assistant', message);
-    throw error;
   }
+}
+
+export function runDagTurn(session: AgentSession, input: string): Promise<boolean> {
+  return new DagOrchestrator(session, input).run();
 }

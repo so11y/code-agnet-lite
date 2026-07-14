@@ -1,5 +1,5 @@
 import path from 'node:path';
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
 import {createTokenUsage, createDefaultSkillRegistry, isAgentBusy, type AgentEvent, type AgentStatus, type ChatItem, type SkillMeta, type TokenUsage} from '@code-agent-lite/core';
 import {getAgentProviderKind} from '@code-agent-lite/platform';

@@ -1,5 +1,7 @@
 # 多 Agent + DAG 调度设计
 
+> 历史设计记录，其中资源声明和 ResourceManager 未采用。当前实现以 `plan-dag-replan-on-failure.md` 和源码为准。
+
 ## 目标
 
 在现有单 Agent（ReAct / ToT）基础上，演进为：
@@ -31,8 +33,8 @@
 用户输入
   → route（react / tot）
   → 单 CodeAgent.run()
-  → judgeShouldVerify
-  → runVerifyAndFixLoop（可选）
+  → VerifyCoordinator.judgeGate()
+  → VerifyCoordinator.runFixLoop()（可选）
   → done
 ```
 

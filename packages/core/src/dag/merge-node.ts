@@ -1,23 +1,15 @@
 import type {AgentSession} from '../session.js';
-import {VerifyCoordinator} from '../verify/verify-coordinator.js';
-import type {Blackboard, TaskNode} from './types.js';
-import {createTaskOutput, type TaskOutput} from './types.js';
+import {TaskOutput, type Blackboard} from './dag-model.js';
 import {extractAssistantText} from '../openai-message.js';
 import {openAiLlm} from '../provider/openai-provider.js';
 import {formatUserRequest} from '../prompt.js';
 
-export async function runVerifyNode(node: TaskNode, cwd: string): Promise<TaskOutput> {
-  return new VerifyCoordinator(cwd).runNodeVerify(node);
-}
-
 export async function runMergeNode(
-  node: TaskNode,
   blackboard: Blackboard,
   session: AgentSession,
   userInput: string
 ): Promise<TaskOutput> {
   const summaries = [...blackboard.nodeOutputs.entries()]
-    .filter(([id]) => id !== node.id)
     .map(([id, output]) => `### ${id}\n${output.summary}`)
     .join('\n\n');
 
@@ -43,13 +35,8 @@ export async function runMergeNode(
   const summary = extractAssistantText(response) || '任务已完成。';
   session.events.say('assistant', summary);
 
-  return createTaskOutput({
+  return new TaskOutput({
     summary,
-    operations: {
-      writtenFiles: [...blackboard.writtenFiles],
-      deletedFiles: [...blackboard.deletedFiles],
-      executedCommands: [...blackboard.executedCommands]
-    },
     facts: [...blackboard.facts]
   });
 }

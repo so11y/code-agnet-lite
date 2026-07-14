@@ -1,4 +1,3 @@
-import React from 'react';
 import {Box, Text} from 'ink';
 import type {SkillMeta} from '@code-agent-lite/core';
 import {

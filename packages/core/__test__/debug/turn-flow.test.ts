@@ -28,17 +28,6 @@ vi.mock('../../src/provider/openai-provider.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/verify/index.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/verify/index.js')>();
-  return {
-    ...actual,
-    judgeShouldVerify: vi.fn(async (session: AgentSession) => ({
-      ...session.ledger.collectTurnSummary(session.conversation.extractLastAssistantText()),
-      gate: {shouldVerify: false, reason: 'debug 跳过 verify'}
-    }))
-  };
-});
-
 import type {AgentEvent} from '../../src/types/events.js';
 import {defaultPlugins, PluginDriver} from '../../src/plugin/index.js';
 import {runAgentTurn} from '../../src/loop.js';

@@ -1,7 +1,10 @@
-import type {SerializedTaskGraph, TaskNode, TaskNodeKind, TaskNodeStatus} from '@code-agent-lite/core';
-import {topologicalSortIds} from '@code-agent-lite/core';
+import type {SerializedTaskGraph, TaskNodeKind} from '@code-agent-lite/core';
+import {TASK_NODE_STATUS, topologicalSortIds} from '@code-agent-lite/core';
 
-export type PlanTodoItem = Pick<TaskNode, 'id' | 'kind' | 'goal' | 'status' | 'error'>;
+export type PlanTodoItem = Pick<
+  SerializedTaskGraph['nodes'][number],
+  'id' | 'kind' | 'goal' | 'status' | 'error'
+>;
 
 export type PlanTodoState = {
   summary?: string;
@@ -20,7 +23,10 @@ export function kindLabel(kind: TaskNodeKind): string {
 }
 
 export function countFinished(items: PlanTodoItem[]): number {
-  return items.filter((item) => item.status === 'done' || item.status === 'skipped').length;
+  return items.filter(
+    (item) =>
+      item.status === TASK_NODE_STATUS.DONE || item.status === TASK_NODE_STATUS.SKIPPED
+  ).length;
 }
 
 export function sortPlanItemsByGraph(items: PlanTodoItem[], edges: SerializedTaskGraph['edges']): PlanTodoItem[] {

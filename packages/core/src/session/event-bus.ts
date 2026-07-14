@@ -15,6 +15,10 @@ export class SessionEventBus {
 
   constructor(private readonly onEvent: (event: AgentEvent) => void) {}
 
+  emit(event: AgentEvent) {
+    this.onEvent(event);
+  }
+
   recordTokenUsage(usage: TokenUsage) {
     this.tokenUsage.prompt += usage.prompt;
     this.tokenUsage.completion += usage.completion;

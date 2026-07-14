@@ -30,14 +30,8 @@ import {defaultPlugins} from './plugin/builtins.js';
 
 import {createPluginSessionContext, HookStrategy, PluginHook} from './plugin/types.js';
 
-export type OpenAgentSessionOptions = Omit<AgentSessionOptions, 'plugins'> & {
-  plugins?: AgentSessionOptions['plugins'];
-};
-
 export class AgentSession {
   static current: AgentSession | null = null;
-
-  cwd: string;
 
   reasoningMode?: ReasoningMode;
 
@@ -51,15 +45,13 @@ export class AgentSession {
 
   readonly ledger: TurnLedger;
 
-  private readonly pluginDriver_: PluginDriver;
+  private readonly pluginDriver: PluginDriver;
 
   private readonly stateProjector_: StateDeltaProjectorState = createStateDeltaProjectorState();
 
   private turnSignal_?: AbortSignal;
 
   constructor(readonly options: AgentSessionOptions) {
-    this.cwd = options.cwd;
-
     this.toolRegistry = options.tools ?? createDefaultToolRegistry();
 
     this.events = new SessionEventBus(options.onEvent);
@@ -70,13 +62,23 @@ export class AgentSession {
 
     this.ledger = new TurnLedger();
 
-    this.pluginDriver_ = new PluginDriver(options.plugins ?? defaultPlugins());
+    this.pluginDriver = new PluginDriver(options.plugins ?? defaultPlugins());
+  }
+
+  get cwd(): string {
+    return this.options.cwd;
+  }
+
+  createChildOptions(
+    overrides: Partial<Omit<AgentSessionOptions, 'cwd'>> = {}
+  ): AgentSessionOptions {
+    return {...this.options, ...overrides, cwd: this.cwd};
   }
 
   static async open(options: AgentSessionOptions): Promise<AgentSession> {
     const session = new AgentSession(options);
 
-    await session.pluginDriver_.runHook(
+    await session.pluginDriver.runHook(
       PluginHook.SessionReady,
       HookStrategy.Void,
       createPluginSessionContext(session)
@@ -85,7 +87,7 @@ export class AgentSession {
     return session;
   }
 
-  static async openSingleton(options: OpenAgentSessionOptions): Promise<AgentSession> {
+  static async openSingleton(options: AgentSessionOptions): Promise<AgentSession> {
     if (AgentSession.current) {
       return AgentSession.current;
     }
@@ -102,7 +104,7 @@ export class AgentSession {
   }
 
   async dispose(): Promise<void> {
-    await this.pluginDriver_.runHook(
+    await this.pluginDriver.runHook(
       PluginHook.SessionDispose,
       HookStrategy.Void,
       createPluginSessionContext(this)
@@ -114,7 +116,7 @@ export class AgentSession {
   }
 
   async runPluginTurn(input: string, cwd?: string): Promise<void> {
-    await this.pluginDriver_.run(input, cwd ?? this.cwd, this);
+    await this.pluginDriver.run(input, cwd ?? this.cwd, this);
   }
 
   setTurnSignal(signal?: AbortSignal) {
@@ -169,11 +171,11 @@ export class AgentSession {
   private changeWorkspace_(cwd: string): Promise<string> {
     const prev = this.cwd;
 
-    this.cwd = cwd;
+    this.options.cwd = cwd;
 
     this.events.setWorkspace(cwd);
 
-    return this.pluginDriver_
+    return this.pluginDriver
       .runHook(PluginHook.WorkspaceChange, HookStrategy.Void, createPluginSessionContext(this), prev)
       .then(() => cwd);
   }

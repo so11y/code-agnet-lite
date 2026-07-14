@@ -37,7 +37,7 @@ export async function runTotTurn(session: AgentSession, agent: CodeAgent): Promi
   try {
     run = await agent.run();
   } catch (error) {
-    const review = await updateStateFromRun(
+    await updateStateFromRun(
       session,
       {completed: false, steps: 0, reason: 'max_steps'},
       error,

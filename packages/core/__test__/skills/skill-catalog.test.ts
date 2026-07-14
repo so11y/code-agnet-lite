@@ -17,7 +17,7 @@ function mockRegistry(discover: SkillRegistry['discover']): SkillRegistry {
     discover,
     formatCatalog: (items) => (items.length ? `catalog:${items.map((s) => s.name).join(',')}` : ''),
     formatNotFound: (name) => `missing:${name}`,
-    formatForPrompt: (skill) => skill.content
+    formatForPrompt: (skill) => skill.body
   };
 }
 

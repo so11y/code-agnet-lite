@@ -3,7 +3,7 @@ export * from './agent-memory.js';
 export {createDefaultToolRegistry, type ToolRegistry} from './tool-registry.js';
 export {createDefaultSkillRegistry, type Skill, type SkillMeta, type SkillRegistry} from './skill-registry.js';
 export {Skills} from './skills/skills.js';
-export {AgentSession, type OpenAgentSessionOptions} from './session.js';
+export {AgentSession} from './session.js';
 export * from './state-ai-view.js';
 export {
   DefaultCodeAgent,
@@ -18,8 +18,6 @@ export {llmPlan, llmReplan, updateStateFromRun} from './planner.js';
 export {routeReasoningMode, type ReasoningRoute} from './router.js';
 export {
   VerifyCoordinator,
-  judgeShouldVerify,
-  runVerifyAndFixLoop,
   decideFixLoopAction,
   type VerifyResult,
   type FixLoopAction
@@ -49,16 +47,9 @@ export {
   type PluginTurnContext
 } from './plugin/index.js';
 export {
-  createTaskOutput,
-  serializeTaskGraph,
-  type Blackboard,
+  TASK_NODE_STATUS,
   type SerializedTaskGraph,
-  type TaskEdge,
-  type TaskGraph,
-  type TaskNode,
   type TaskNodeKind,
-  type TaskNodeStatus,
-  type TaskOutput,
   runDagTurn,
   topologicalSortIds
 } from './dag/index.js';

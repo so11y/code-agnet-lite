@@ -1,7 +1,7 @@
 import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {messageText} from '../openai-message.js';
 import {createWorkspaceSystemMessages} from '../prompt.js';
-import type {AgentMessage, ChatRole} from '../session-types.js';
+import type {AgentMessage} from '../session-types.js';
 import type {SessionEventBus} from './event-bus.js';
 import type {FinishToolOptions} from './finish-tool-options.js';
 

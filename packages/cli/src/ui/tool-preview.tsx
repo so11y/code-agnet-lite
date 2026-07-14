@@ -1,4 +1,3 @@
-import React from 'react';
 import {Box, Text} from 'ink';
 import type {ToolCallItem, ToolDisplay} from '@code-agent-lite/core';
 import {toolInputPath} from '@code-agent-lite/shared';

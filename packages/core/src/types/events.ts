@@ -1,4 +1,4 @@
-import type {TaskNodeKind, TaskOutput} from '../dag/types.js';
+import type {SerializedTaskGraph, TaskNodeKind, TaskOutput} from '../dag/dag-model.js';
 import type {TokenUsage} from './token.js';
 import type {ToolDisplay} from '@code-agent-lite/shared';
 
@@ -40,6 +40,6 @@ export type AgentEvent =
   | {type: 'tool_start'; call: ToolCallItem}
   | {type: 'tool_end'; id: string; output?: string; error?: string; display?: ToolDisplay}
   | {type: 'token_usage'; usage: TokenUsage}
-  | {type: 'dag_snapshot'; graph: import('../dag/types.js').SerializedTaskGraph}
+  | {type: 'dag_snapshot'; graph: SerializedTaskGraph}
   | {type: 'task_start'; nodeId: string; kind: TaskNodeKind}
   | {type: 'task_end'; nodeId: string; output?: TaskOutput; error?: string};

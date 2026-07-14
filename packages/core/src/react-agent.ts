@@ -122,8 +122,6 @@ export abstract class ReActAgent {
       return;
     }
 
-    this.session.ledger.recordToolCall(call.name, parsed.data);
-
     try {
       const {output, display} = normalizeToolResult(
         await withTimeout(
@@ -144,6 +142,7 @@ export abstract class ReActAgent {
           this.session.turnSignal()
         )
       );
+      this.session.ledger.recordToolCall(call.name, parsed.data);
       this.session.conversation.finishTool(call.id, truncate(output), {
         display,
         toolName: call.name,

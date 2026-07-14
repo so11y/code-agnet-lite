@@ -1,119 +1,67 @@
-import {compact} from 'lodash-es';
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
-import {pickField} from '@code-agent-lite/shared';
 import type {AgentTool} from '@code-agent-lite/tools';
 import {DefaultCodeAgent} from '../code-agent.js';
 import {SYSTEM_PROMPT, createWorkspaceSystemMessages} from '../prompt.js';
 import {AgentSession} from '../session.js';
 import type {AgentEvent, AgentSessionOptions} from '../session-types.js';
-import type {Blackboard, TaskNode} from './types.js';
-import {createTaskOutput, type TaskOutput} from './types.js';
-import type {ReleaseHandle, ResourceContext} from './resource-context.js';
+import {TaskOutput, type Blackboard, type TaskNode} from './dag-model.js';
 
 const EXPLORE_TOOLS = new Set(['read_file', 'grep', 'list_files', 'web_search', 'git_diff']);
-const BLOCKED_EXPLORE_TOOLS = new Set(['write_file', 'delete_file', 'run_cmd', 'set_workspace']);
+const MAX_WORKER_RETRIES = 1;
 
 const WORKER_ROLE_PROMPT = `你正在作为 DAG Worker 执行单个子任务。
 只完成当前节点目标，不要扩展到无关工作。
 上游结论仅供参考，关键判断仍需用工具验证。`;
 
-class WorkerCodeAgent extends DefaultCodeAgent {
-  readonly dynamicReleases: ReleaseHandle[] = [];
+const WORKER_RETRY_PROMPT = `上次执行未能成功完成。请检查当前工作区已有结果后继续完成同一目标；完成后必须输出明确的文字结论。`;
 
+class WorkerCodeAgent extends DefaultCodeAgent {
   constructor(
     options: AgentSessionOptions,
     session: AgentSession,
-    private readonly readOnly: boolean,
-    private readonly resourceCtx: ResourceContext,
-    private readonly nodeId: string
+    private readonly readOnly: boolean
   ) {
     super(options, session);
   }
 
   protected findTool(name: string): AgentTool | undefined {
-    if (this.readOnly && BLOCKED_EXPLORE_TOOLS.has(name)) {
-      return undefined;
-    }
-
-    if (this.readOnly && !EXPLORE_TOOLS.has(name)) {
+    if (name === 'set_workspace' || (this.readOnly && !EXPLORE_TOOLS.has(name))) {
       return undefined;
     }
 
     return super.findTool(name);
   }
-
-  protected override async beforeToolExecute(name: string, input: unknown): Promise<boolean> {
-    const filePath = pickField(input, 'path');
-
-    switch (name) {
-      case 'write_file':
-        if (filePath) {
-          this.dynamicReleases.push(await this.resourceCtx.acquireWrite(filePath, this.nodeId));
-        }
-        return true;
-      case 'delete_file':
-        if (filePath) {
-          this.dynamicReleases.push(await this.resourceCtx.acquireWrite(filePath, this.nodeId));
-        }
-        return true;
-      case 'run_cmd':
-        this.dynamicReleases.push(await this.resourceCtx.acquireCommand(this.nodeId));
-        return true;
-      case 'set_workspace':
-        return false;
-      default:
-        return true;
-    }
-  }
 }
 
 function buildUpstreamContext(node: TaskNode, blackboard: Blackboard) {
-  const lines = compact(
-    node.dependsOn.map((id) => {
-      const output = blackboard.nodeOutputs.get(id);
-      if (!output) {
-        return;
-      }
-
-      return `节点 ${id}：${output.summary}`;
-    })
-  );
-
-  if (!lines.length) {
-    return '';
-  }
-
-  return ['[upstream]', ...lines].join('\n');
+  const lines = node.dependsOn.flatMap((id) => {
+    const output = blackboard.nodeOutputs.get(id);
+    return output ? [`节点 ${id}：${output.summary}`] : [];
+  });
+  return lines.length ? ['[upstream]', ...lines].join('\n') : '';
 }
 
-function createWorkerOnEvent(parent: AgentSessionOptions, node: TaskNode): AgentSessionOptions['onEvent'] {
+function createWorkerOnEvent(
+  onEvent: AgentSessionOptions['onEvent'],
+  node: TaskNode
+): AgentSessionOptions['onEvent'] {
   return (event: AgentEvent) => {
     switch (event.type) {
       case 'status':
-        parent.onEvent(event);
-        break;
-      case 'thinking_start':
-        parent.onEvent({type: 'thinking_start'});
-        parent.onEvent({type: 'thinking_delta', delta: `[${node.id}]\n`});
-        break;
       case 'thinking_delta':
       case 'thinking_end':
-        parent.onEvent(event);
+      case 'tool_end':
+      case 'token_usage':
+        onEvent(event);
+        break;
+      case 'thinking_start':
+        onEvent(event);
+        onEvent({type: 'thinking_delta', delta: `[${node.id}]\n`});
         break;
       case 'tool_start':
-        parent.onEvent({
+        onEvent({
           type: 'tool_start',
           call: {...event.call, name: `${node.id}:${event.call.name}`}
         });
-        break;
-      case 'tool_end':
-        parent.onEvent({
-          ...event,
-          id: event.id
-        });
-        break;
-      case 'token_usage':
-        parent.onEvent(event);
         break;
       default:
         break;
@@ -121,72 +69,76 @@ function createWorkerOnEvent(parent: AgentSessionOptions, node: TaskNode): Agent
   };
 }
 
-export function createWorkerSession(
-  node: TaskNode,
-  blackboard: Blackboard,
-  parentOptions: AgentSessionOptions,
-  workerMaxSteps: number
-): AgentSession {
-  const session = new AgentSession({
-    cwd: parentOptions.cwd,
-    maxSteps: workerMaxSteps,
-    provider: parentOptions.provider,
-    onEvent: createWorkerOnEvent(parentOptions, node)
-  });
+export class DagWorker {
+  constructor(
+    private readonly node: TaskNode,
+    private readonly blackboard: Blackboard,
+    private readonly parentSession: AgentSession,
+    private readonly maxSteps: number
+  ) {}
 
-  session.conversation.messages.splice(0, session.conversation.messages.length);
-  session.conversation.messages.push(
-    ...createWorkspaceSystemMessages(parentOptions.cwd, `${SYSTEM_PROMPT}\n\n${WORKER_ROLE_PROMPT}`),
-    {role: 'system', content: `Worker 节点：${node.id}（${node.kind}）`}
-  );
+  async run(): Promise<TaskOutput> {
+    const output = new TaskOutput();
+    let lastError: unknown;
 
-  const upstream = buildUpstreamContext(node, blackboard);
-  if (upstream) {
-    session.conversation.messages.push({role: 'system', content: upstream});
-  }
+    for (let attempt = 0; attempt <= MAX_WORKER_RETRIES; attempt += 1) {
+      const session = this.createSession();
+      const agent = new WorkerCodeAgent(
+        session.options,
+        session,
+        this.node.kind === 'explore'
+      );
+      const retryInstruction = attempt > 0 ? `\n\n${WORKER_RETRY_PROMPT}` : '';
+      session.conversation.appendUser(`[本节点目标]\n${this.node.goal}${retryInstruction}`);
 
-  return session;
-}
+      try {
+        const result = await agent.run();
+        if (!result.completed) {
+          throw new Error(`Worker ${this.node.id} 未在 ${result.steps} 步内完成`);
+        }
 
-export async function runWorkerNode(
-  node: TaskNode,
-  blackboard: Blackboard,
-  parentSession: AgentSession,
-  resourceCtx: ResourceContext,
-  workerMaxSteps: number
-): Promise<TaskOutput> {
-  const workerSession = createWorkerSession(node, blackboard, parentSession.options, workerMaxSteps);
+        const summary = session.conversation.extractLastAssistantText();
+        if (!summary.trim()) {
+          throw new Error(`Worker ${this.node.id} 未返回有效摘要`);
+        }
 
-  const readOnly = node.kind === 'explore';
-  const agent = new WorkerCodeAgent(
-    {...parentSession.options, maxSteps: workerMaxSteps},
-    workerSession,
-    readOnly,
-    resourceCtx,
-    node.id
-  );
+        output.summary = summary;
+        return output;
+      } catch (error) {
+        lastError = error;
+      } finally {
+        output.mergeFrom(session.ledger.snapshot());
+      }
 
-  workerSession.conversation.appendUser(`[本节点目标]\n${node.goal}`);
-  try {
-    const result = await agent.run();
-
-    if (!result.completed) {
-      throw new Error(`Worker ${node.id} 未在 ${result.steps} 步内完成`);
+      this.parentSession.throwIfAborted();
     }
-  } finally {
-    agent.dynamicReleases.forEach((release) => release());
+
+    this.blackboard.mergeNodeOutput(this.node.id, output);
+    throw lastError;
   }
 
-  const summary = workerSession.conversation.extractLastAssistantText();
-  if (!summary.trim()) {
-    throw new Error(`Worker ${node.id} 未返回有效摘要`);
-  }
+  private createSession(): AgentSession {
+    const session = new AgentSession(
+      this.parentSession.createChildOptions({
+        maxSteps: this.maxSteps,
+        onEvent: createWorkerOnEvent((event) => this.parentSession.events.emit(event), this.node)
+      })
+    );
 
-  return createTaskOutput({
-    summary,
-    operations: workerSession.ledger.refreshOperations(),
-    facts: [...workerSession.ledger.state.facts],
-    visitedFiles: [...workerSession.ledger.state.visitedFiles],
-    searchedTerms: [...workerSession.ledger.state.searchedTerms]
-  });
+    session.conversation.messages.splice(0, session.conversation.messages.length);
+    session.conversation.messages.push(
+      ...createWorkspaceSystemMessages(
+        session.cwd,
+        `${SYSTEM_PROMPT}\n\n${WORKER_ROLE_PROMPT}`
+      ),
+      {role: 'system', content: `Worker 节点：${this.node.id}（${this.node.kind}）`}
+    );
+
+    const upstream = buildUpstreamContext(this.node, this.blackboard);
+    if (upstream) {
+      session.conversation.messages.push({role: 'system', content: upstream});
+    }
+
+    return session;
+  }
 }

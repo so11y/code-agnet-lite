@@ -1,6 +1,6 @@
 import {pickField} from '@code-agent-lite/shared';
 import {compact, union} from 'lodash-es';
-import {SessionState} from '../agent-memory.js';
+import {SessionState, type MemoryMergeSource} from '../agent-memory.js';
 import type {TurnOperations, TurnSummary} from '../session-types.js';
 import {createEmptyTurnOperations} from '../types/operations.js';
 
@@ -31,11 +31,10 @@ const TURN_TOOL_TRACKS: Record<string, TurnToolTrack> = {
 export class TurnLedger {
   readonly state: SessionState = new SessionState();
   private turnUserInput = '';
-  private turnOps: TurnOperations = createEmptyTurnOperations();
 
   beginTurn(userInput: string) {
     this.turnUserInput = userInput;
-    this.turnOps = createEmptyTurnOperations();
+    this.state.operations = createEmptyTurnOperations();
   }
 
   applyHypotheses(hypotheses: string[]) {
@@ -70,20 +69,30 @@ export class TurnLedger {
       return;
     }
 
-    this.turnOps[turnTrack.turnKey] = union(this.turnOps[turnTrack.turnKey], [value]);
+    this.state.operations[turnTrack.turnKey] = union(
+      this.state.operations[turnTrack.turnKey],
+      [value]
+    );
   }
 
   mergeTurnOperations(operations: TurnOperations) {
-    this.turnOps.writtenFiles = union(this.turnOps.writtenFiles, operations.writtenFiles);
-    this.turnOps.deletedFiles = union(this.turnOps.deletedFiles, operations.deletedFiles);
-    this.turnOps.executedCommands = union(this.turnOps.executedCommands, operations.executedCommands);
+    this.state.mergeFrom({operations});
   }
 
   refreshOperations(): TurnOperations {
     return {
-      writtenFiles: [...this.turnOps.writtenFiles],
-      deletedFiles: [...this.turnOps.deletedFiles],
-      executedCommands: [...this.turnOps.executedCommands]
+      writtenFiles: [...this.state.operations.writtenFiles],
+      deletedFiles: [...this.state.operations.deletedFiles],
+      executedCommands: [...this.state.operations.executedCommands]
+    };
+  }
+
+  snapshot(): MemoryMergeSource {
+    return {
+      facts: [...this.state.facts],
+      visitedFiles: [...this.state.visitedFiles],
+      searchedTerms: [...this.state.searchedTerms],
+      operations: this.refreshOperations()
     };
   }
 

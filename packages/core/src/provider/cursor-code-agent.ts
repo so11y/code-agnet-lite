@@ -6,7 +6,6 @@ import type {
 } from 'openai/resources/chat/completions';
 import {buildCursorTurnPrompt} from '../prompt.js';
 import {messageText} from '../openai-message.js';
-import type {AgentSession} from '../session.js';
 import type {AgentMessage, LlmStreamOptions, ToolCallItem} from '../session-types.js';
 import {ReActAgent, type AgentRunResult} from '../react-agent.js';
 import {

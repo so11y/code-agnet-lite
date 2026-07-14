@@ -1,5 +1,5 @@
 import {compact, union} from 'lodash-es';
-import type {TurnOperations} from './types/operations.js';
+import {createEmptyTurnOperations, type TurnOperations} from './types/operations.js';
 
 export type MemoryMergeSource = {
   facts?: string[];
@@ -13,17 +13,11 @@ export class BaseMemory {
   facts: string[] = [];
   visitedFiles: string[] = [];
   searchedTerms: string[] = [];
-  writtenFiles: string[] = [];
-  deletedFiles: string[] = [];
-  executedCommands: string[] = [];
+  operations: TurnOperations = createEmptyTurnOperations();
 
-  addFacts(items: string[]) {
-    this.facts = union(this.facts, compact(items));
-  }
-
-  mergeLists(source: Pick<MemoryMergeSource, 'facts' | 'visitedFiles' | 'searchedTerms'>) {
+  mergeFrom(source: MemoryMergeSource) {
     if (source.facts?.length) {
-      this.addFacts(source.facts);
+      this.facts = union(this.facts, compact(source.facts));
     }
 
     if (source.visitedFiles?.length) {
@@ -33,19 +27,20 @@ export class BaseMemory {
     if (source.searchedTerms?.length) {
       this.searchedTerms = union(this.searchedTerms, source.searchedTerms);
     }
-  }
-
-  mergeOperations(operations: TurnOperations) {
-    this.writtenFiles = union(this.writtenFiles, operations.writtenFiles);
-    this.deletedFiles = union(this.deletedFiles, operations.deletedFiles);
-    this.executedCommands = union(this.executedCommands, operations.executedCommands);
-  }
-
-  mergeFrom(source: MemoryMergeSource) {
-    this.mergeLists(source);
 
     if (source.operations) {
-      this.mergeOperations(source.operations);
+      this.operations.writtenFiles = union(
+        this.operations.writtenFiles,
+        source.operations.writtenFiles
+      );
+      this.operations.deletedFiles = union(
+        this.operations.deletedFiles,
+        source.operations.deletedFiles
+      );
+      this.operations.executedCommands = union(
+        this.operations.executedCommands,
+        source.operations.executedCommands
+      );
     }
   }
 }

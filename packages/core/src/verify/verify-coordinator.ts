@@ -1,4 +1,3 @@
-import {joinSections} from '@code-agent-lite/shared';
 import {llmReplan} from '../planner.js';
 import {VERIFY_GATE_PROMPT} from '../prompt.js';
 import type {CodeAgent} from '../code-agent.js';
@@ -6,7 +5,7 @@ import type {AgentSession} from '../session.js';
 import type {ReasoningMode, TurnReview} from '../session-types.js';
 import {executeReasoningMode} from '../turn/execute-mode.js';
 import {callStructuredLlm} from '../structured-llm-caller.js';
-import {createTaskOutput, type TaskNode, type TaskOutput} from '../dag/types.js';
+import {TaskOutput, type TaskNode} from '../dag/dag-model.js';
 import {createEmptyTurnOperations, verifyGateSchema} from '../types/operations.js';
 import {discoverVerifyCommands} from './verify-discovery.js';
 import {
@@ -44,7 +43,7 @@ export class VerifyCoordinator {
     const commands = await this.discover();
 
     if (commands.length === 0) {
-      return createTaskOutput({
+      return new TaskOutput({
         summary: '未找到可运行的验证命令，已跳过自动验证。',
         operations: createEmptyTurnOperations(),
         facts: ['当前工作区没有 npm test / typecheck 等验证命令']
@@ -54,7 +53,7 @@ export class VerifyCoordinator {
     const failures = await this.runAll(commands);
 
     if (failures.length === 0) {
-      return createTaskOutput({
+      return new TaskOutput({
         summary: `验证通过：${commands.join('、')}`,
         operations: {writtenFiles: [], deletedFiles: [], executedCommands: commands},
         facts: ['DAG verify 节点验证通过']
@@ -164,17 +163,4 @@ export class VerifyCoordinator {
     const mode = reasoningMode === 'tot' ? 'tot' : 'react';
     await executeReasoningMode(session, mode, {agent});
   }
-}
-
-export async function judgeShouldVerify(session: AgentSession): Promise<TurnReview> {
-  return VerifyCoordinator.judgeGate(session);
-}
-
-export async function runVerifyAndFixLoop(
-  agent: CodeAgent,
-  session: AgentSession,
-  review: TurnReview,
-  reasoningMode?: ReasoningMode
-): Promise<void> {
-  await new VerifyCoordinator(session.cwd).runFixLoop(agent, session, review, reasoningMode);
 }

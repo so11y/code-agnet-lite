@@ -1,6 +1,5 @@
-import React from 'react';
 import {Box, Text} from 'ink';
-import {find, some} from 'lodash-es';
+import {TASK_NODE_STATUS} from '@code-agent-lite/core';
 import {Spinner} from './Spinner.js';
 import {compactText} from '@code-agent-lite/shared';
 import {
@@ -15,13 +14,14 @@ type Props = {
 };
 
 function PlanTodoRow({item}: {item: PlanTodoItem}) {
-  const finished = item.status === 'done' || item.status === 'skipped';
-  const failed = item.status === 'failed';
+  const finished =
+    item.status === TASK_NODE_STATUS.DONE || item.status === TASK_NODE_STATUS.SKIPPED;
+  const failed = item.status === TASK_NODE_STATUS.FAILED;
 
   return (
     <Box flexDirection="column" marginTop={0} paddingLeft={1}>
       <Text>
-        {item.status === 'running' ? (
+        {item.status === TASK_NODE_STATUS.RUNNING ? (
           <>
             <Text color="blue">
               <Spinner />
@@ -30,7 +30,13 @@ function PlanTodoRow({item}: {item: PlanTodoItem}) {
           </>
         ) : (
           <Text color={failed ? 'red' : finished ? 'green' : 'gray'}>
-            {item.status === 'done' ? '✓ ' : item.status === 'failed' ? '✗ ' : item.status === 'skipped' ? '– ' : '○ '}
+            {item.status === TASK_NODE_STATUS.DONE
+              ? '✓ '
+              : item.status === TASK_NODE_STATUS.FAILED
+                ? '✗ '
+                : item.status === TASK_NODE_STATUS.SKIPPED
+                  ? '– '
+                  : '○ '}
           </Text>
         )}
         <Text color="gray">[{kindLabel(item.kind)}] </Text>
@@ -52,8 +58,8 @@ export function PlanTodoPanel({plan}: Props) {
   const finished = countFinished(plan.items);
   const total = plan.items.length;
   const allDone = total > 0 && finished === total;
-  const hasFailed = some(plan.items, {status: 'failed'});
-  const running = find(plan.items, {status: 'running'});
+  const hasFailed = plan.items.some((item) => item.status === TASK_NODE_STATUS.FAILED);
+  const running = plan.items.find((item) => item.status === TASK_NODE_STATUS.RUNNING);
 
   return (
     <Box flexDirection="column" marginTop={1} paddingX={1} borderStyle="round" borderColor="gray">
