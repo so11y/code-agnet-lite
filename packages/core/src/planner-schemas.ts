@@ -39,8 +39,3 @@ export const reviewSchema = z.object({
 
 export type Plan = z.infer<typeof planSchema>;
 export type PlanReview = z.infer<typeof reviewSchema>;
-
-export function formatSchemaForPrompt(schema: z.ZodType): string {
-  const {$schema: _, ...jsonSchema} = z.toJSONSchema(schema, {reused: 'inline'});
-  return JSON.stringify(jsonSchema, null, 2);
-}

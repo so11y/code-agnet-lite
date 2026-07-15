@@ -14,7 +14,7 @@ cd code-agent-lite
 npm install
 ```
 
-### 配置 API Key
+### 配置 API 与模型
 
 **第一步：** 复制环境变量模板
 
@@ -30,7 +30,8 @@ copy .env.example .env
 |------|--------|------|
 | `OPENAI_API_KEY` | **是**（默认模式） | OpenAI 或兼容网关的 API Key |
 | `OPENAI_BASE_URL` | 否 | 默认 `https://api.openai.com/v1`；国内/自建网关改成你的地址 |
-| `OPENAI_MODEL` | 否 | 如 `gpt-4o`，省略则用平台默认 |
+| `OPENAI_MODEL` | **是** | OpenAI 或兼容网关实际提供的模型 ID |
+| `ENABLE_THINKING` | 否 | 默认关闭；仅在兼容网关明确支持 `enable_thinking` 时设为 `true` |
 | `AGENT_PROVIDER` | 否 | `openai`（默认）或 `cursor` |
 | `CURSOR_API_KEY` | cursor 模式时 | [Cursor 设置](https://cursor.com/settings) 获取 |
 
@@ -41,6 +42,7 @@ copy .env.example .env
 
 ```env
 OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxx
+OPENAI_MODEL=你的模型名
 ```
 
 **国内 OpenAI 兼容网关示例：**
@@ -48,10 +50,10 @@ OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxx
 ```env
 OPENAI_API_KEY=你的网关密钥
 OPENAI_BASE_URL=https://api.example.com/v1
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=你的网关模型名
 ```
 
-**说明：** `AGENT_PROVIDER` 只影响**主 Agent 执行**（读改文件那层）。任务路由、ToT/DAG 规划、验证等仍调用 OpenAI 接口，因此 **cursor 模式下也需要配置 `OPENAI_API_KEY`**（或指向兼容网关）。
+**说明：** `AGENT_PROVIDER` 只影响**主 Agent 执行**（读改文件那层）。任务路由、ToT/DAG 规划、验证等仍调用 OpenAI 接口，因此 **cursor 模式下也需要配置 `OPENAI_API_KEY` 和 `OPENAI_MODEL`**（或指向兼容网关）。
 
 全部变量见 [.env.example](../.env.example)。
 
@@ -123,6 +125,8 @@ npm run typecheck && npm run test && npm run build
 ## 常见问题
 
 **Missing OPENAI_API_KEY** — 确认根目录有 `.env`（从 `.env.example` 复制），且 `OPENAI_API_KEY=` 后填了真实密钥，保存后重新 `npm run dev`。
+
+**Missing OPENAI_MODEL** — 在根目录 `.env` 中填写 OpenAI 或兼容网关实际提供的模型 ID。
 
 **文件不在期望的项目** — `npm run dev -- <项目路径>` 指定工作区。
 

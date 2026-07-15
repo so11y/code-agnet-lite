@@ -1,5 +1,3 @@
-import {formatSchemaForPrompt, planSchema, reviewSchema} from './planner-schemas.js';
-
 export const SYSTEM_PROMPT = `你是一个代码 Agent。
 
 规则：
@@ -104,9 +102,6 @@ const PLAN_COMMON_RULES = `- 不要调用工具。
 - 不要暴露内部思维链。
 - 将输出视为假设，而非已验证事实。`;
 
-const PLAN_JSON_SCHEMA = formatSchemaForPrompt(planSchema);
-const REVIEW_JSON_SCHEMA = formatSchemaForPrompt(reviewSchema);
-
 const PLAN_ROOT_PROMPT = `你是代码 Agent 的思维树（ToT）规划模块。
 阅读当前会话上下文，在内部探索若干可行的实现路径，然后只返回最佳工作假设。
 
@@ -115,8 +110,7 @@ ${PLAN_COMMON_RULES}
 - 优先选择符合现有代码结构的保守方案。
 - ReAct 执行器在依赖此计划前，必须通过读取文件、搜索代码或运行命令验证关键假设。
 
-只返回 JSON，并符合以下 JSON Schema（字段说明见 description）：
-${PLAN_JSON_SCHEMA}`;
+只返回符合输出结构的 JSON。`;
 
 const PLAN_REPLAN_PROMPT = `你是代码 Agent 的换思路规划模块。
 先前假设进展不足或已被拒绝，请给出明显不同的新工作假设。
@@ -126,8 +120,7 @@ ${PLAN_COMMON_RULES}
 - 不要重复已拒绝方向。
 - 优先探索尚未搜索的文件、术语或实现路径。
 
-只返回 JSON，并符合以下 JSON Schema（字段说明见 description）：
-${PLAN_JSON_SCHEMA}`;
+只返回符合输出结构的 JSON。`;
 
 const PLAN_PROMPTS = {
   root: PLAN_ROOT_PROMPT,
@@ -211,5 +204,4 @@ export const REVIEW_TOT_PROMPT = `你在 ReAct 运行后复盘思维树（ToT）
 - 当运行失败、达到最大步数、与根假设矛盾，或需要明显不同策略时，将 directionCorrect 设为 false。
 - 若 directionCorrect=false，填写 rejected 与 hypotheses。
 
-只返回 JSON，并符合以下 JSON Schema（字段说明见 description）：
-${REVIEW_JSON_SCHEMA}`;
+只返回符合输出结构的 JSON。`;

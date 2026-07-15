@@ -29,13 +29,21 @@ export function getOpenAiBaseUrl(): string | undefined {
   return baseUrl || undefined;
 }
 
-export function getOpenAiModel(defaultModel?: string): string {
-  return process.env.OPENAI_MODEL?.trim() || defaultModel || "";
+export function getOpenAiModel(): string {
+  const model = process.env.OPENAI_MODEL?.trim();
+
+  if (!model) {
+    throw new Error(
+      "Missing OPENAI_MODEL. Add OPENAI_MODEL=your-model to the project root .env file."
+    );
+  }
+
+  return model;
 }
 
 export function isThinkingEnabled(): boolean {
   const value = process.env.ENABLE_THINKING?.trim().toLowerCase();
-  return value !== "false" && value !== "0";
+  return value === "true" || value === "1";
 }
 
 export type AgentProviderKind = "openai" | "cursor";
@@ -123,7 +131,7 @@ export function getActiveModelName(): string {
     return getCursorModel();
   }
 
-  return getOpenAiModel();
+  return process.env.OPENAI_MODEL?.trim() ?? "";
 }
 
 export function getContextLimit(model = getActiveModelName()): number {

@@ -11,14 +11,14 @@ npm install
 cp .env.example .env    # Windows: copy .env.example .env
 ```
 
-编辑 `.env`，填入 API Key（见下方说明），然后：
+编辑 `.env`，填入 API Key 和模型名（见下方说明），然后：
 
 ```bash
 npm run dev                  # 工作区 = 当前目录
 npm run dev -- D:\my-project # 指定工作区
 ```
 
-### 配置 API Key
+### 配置 API 与模型
 
 1. 复制 `.env.example` → `.env`（项目根目录，与 `package.json` 同级）
 2. 打开 [OpenAI API Keys](https://platform.openai.com/api-keys)，创建密钥
@@ -26,11 +26,12 @@ npm run dev -- D:\my-project # 指定工作区
 
 ```env
 OPENAI_API_KEY=sk-proj-你的密钥
+OPENAI_MODEL=你的模型名
 ```
 
 4. 若用国内/自建 **OpenAI 兼容网关**，再加一行 `OPENAI_BASE_URL=https://你的网关/v1`
 
-**Cursor 模式（可选）：** `.env` 里设 `AGENT_PROVIDER=cursor` 和 `CURSOR_API_KEY`（Cursor 账户获取）。此时主 Agent 走 Cursor，但路由/规划仍要 `OPENAI_API_KEY`。
+**Cursor 模式（可选）：** `.env` 里设 `AGENT_PROVIDER=cursor` 和 `CURSOR_API_KEY`（Cursor 账户获取）。此时主 Agent 走 Cursor，但路由/规划仍要 `OPENAI_API_KEY` 和 `OPENAI_MODEL`。
 
 完整变量说明见 [.env.example](.env.example) 和 [docs/getting-started.md](docs/getting-started.md)。
 

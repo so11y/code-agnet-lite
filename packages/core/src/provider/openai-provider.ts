@@ -25,9 +25,6 @@ import type {
   StructuredLlmResult
 } from './types.js';
 
-const DEFAULT_MODEL = '';
-let sharedModel: LanguageModel | undefined;
-
 async function fetchWithThinking(input: RequestInfo | URL, init?: RequestInit) {
   if (!isThinkingEnabled() || typeof init?.body !== 'string') {
     return globalThis.fetch(input, init);
@@ -44,13 +41,12 @@ async function fetchWithThinking(input: RequestInfo | URL, init?: RequestInit) {
   }
 }
 
-function defaultModel(): LanguageModel {
-  sharedModel ??= createOpenAI({
+function createDefaultModel(): LanguageModel {
+  return createOpenAI({
     apiKey: getRequiredOpenAiApiKey(),
     baseURL: getOpenAiBaseUrl(),
     fetch: fetchWithThinking
-  }).chat(getOpenAiModel(DEFAULT_MODEL));
-  return sharedModel;
+  }).chat(getOpenAiModel());
 }
 
 function resolveTools(session: LlmOptions['session']): ToolSet {
@@ -73,7 +69,7 @@ export class OpenAiLlmProvider implements LlmProvider {
   constructor(private readonly modelOverride?: LanguageModel) {}
 
   private model() {
-    return this.modelOverride ?? defaultModel();
+    return this.modelOverride ?? createDefaultModel();
   }
 
   private recordUsage(
