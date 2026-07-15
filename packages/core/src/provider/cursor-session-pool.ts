@@ -33,13 +33,6 @@ async function createCursorAgent(cwd: string): Promise<CursorAgentHandle> {
   return wrapSdkAgent(agent);
 }
 
-let sharedPool: CursorSessionPool | undefined;
-
-export function getCursorSessionPool(): CursorSessionPool {
-  sharedPool ??= new CursorSessionPool();
-  return sharedPool;
-}
-
 export class CursorSessionPool {
   private readonly sessions = new WeakMap<AgentSession, CursorSessionState>();
 
@@ -68,3 +61,5 @@ export class CursorSessionPool {
     }
   }
 }
+
+export const cursorSessionPool = new CursorSessionPool();

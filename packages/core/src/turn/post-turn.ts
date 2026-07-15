@@ -1,7 +1,7 @@
 import {supportsToolLoop, type CodeAgent} from '../code-agent.js';
 import type {AgentSession} from '../session.js';
 import type {ReasoningMode} from '../reasoning-mode.js';
-import {agentProviders} from '../provider/provider-registry.js';
+import {agentProviders} from '../provider/agent-providers.js';
 import {VerifyCoordinator} from '../verify/verify-coordinator.js';
 
 export async function runPostTurnVerify(

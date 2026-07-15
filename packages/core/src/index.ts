@@ -54,7 +54,6 @@ export {
   topologicalSortIds
 } from './dag/index.js';
 export {
-  AgentProviderRegistry,
   agentProviders,
   type AgentProvider,
   type AgentProviderKind

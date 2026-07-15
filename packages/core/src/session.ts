@@ -29,8 +29,6 @@ type ChildSessionOptions = {
 };
 
 export class AgentSession {
-  static current: AgentSession | null = null;
-
   readonly toolRegistry: ToolRegistry;
   readonly skills: Skills;
   readonly events: SessionEventBus;
@@ -90,29 +88,12 @@ export class AgentSession {
     return session;
   }
 
-  static async openSingleton(options: AgentSessionOptions): Promise<AgentSession> {
-    if (AgentSession.current) {
-      return AgentSession.current;
-    }
-
-    AgentSession.current = await AgentSession.open(options);
-    return AgentSession.current;
-  }
-
-  static async closeSingleton(): Promise<void> {
-    await AgentSession.current?.dispose();
-  }
-
   async dispose(): Promise<void> {
     await this.pluginDriver.runHook(
       PluginHook.SessionDispose,
       HookStrategy.Void,
       createPluginSessionContext(this)
     );
-
-    if (AgentSession.current === this) {
-      AgentSession.current = null;
-    }
   }
 
   async runPluginTurn(input: string, cwd?: string): Promise<void> {

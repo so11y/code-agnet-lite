@@ -12,21 +12,38 @@ type Options = {
 
 export function useAgentSession({onEvent}: Options) {
   const abortRef = useRef<AbortController | null>(null);
+  const sessionPromiseRef = useRef<Promise<AgentSession> | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
   const ensureSession = useCallback(async (cwd: string) => {
-    return AgentSession.openSingleton({
-      cwd,
-      provider: getAgentProviderKind(),
-      onEvent: (event: AgentEvent) => onEventRef.current(event)
-    });
+    if (!sessionPromiseRef.current) {
+      const opening = AgentSession.open({
+        cwd,
+        provider: getAgentProviderKind(),
+        onEvent: (event: AgentEvent) => onEventRef.current(event)
+      });
+      sessionPromiseRef.current = opening;
+
+      try {
+        await opening;
+      } catch (error) {
+        if (sessionPromiseRef.current === opening) {
+          sessionPromiseRef.current = null;
+        }
+        throw error;
+      }
+    }
+
+    return sessionPromiseRef.current;
   }, []);
 
   const clearSession = useCallback(async () => {
     abortRef.current?.abort();
     abortRef.current = null;
-    await AgentSession.closeSingleton();
+    const session = sessionPromiseRef.current;
+    sessionPromiseRef.current = null;
+    await (await session)?.dispose();
   }, []);
 
   useEffect(() => () => {

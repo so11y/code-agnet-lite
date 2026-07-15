@@ -1,4 +1,4 @@
-import {agentProviders} from '../provider/provider-registry.js';
+import {agentProviders} from '../provider/agent-providers.js';
 import {routeReasoningMode} from '../router.js';
 import {executeReasoningMode} from '../turn/execute-mode.js';
 import {prepareTurn} from '../turn/prepare-turn.js';

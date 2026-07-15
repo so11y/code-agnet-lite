@@ -16,7 +16,7 @@ import {
   type CursorSdkMessage,
   type CursorStreamMapperSink
 } from './cursor-stream-mapper.js';
-import {getCursorSessionPool} from './cursor-session-pool.js';
+import {cursorSessionPool} from './cursor-session-pool.js';
 import {normalizeCursorUsage, recordTokenUsage} from './token-usage.js';
 
 function cursorAssistantMessage(text: string | undefined, toolCalls: ToolCall[]): AssistantMessage {
@@ -37,7 +37,7 @@ export class CursorCodeAgent extends ReActAgent {
   async run(): Promise<AgentRunResult> {
     this.session.events.status('thinking', 'Cursor Agent');
 
-    const agent = await getCursorSessionPool().ensure(this.session, this.session.cwd);
+    const agent = await cursorSessionPool.ensure(this.session, this.session.cwd);
     const openTools = new Map<string, ToolCallItem>();
     const completedToolCalls: ToolCall[] = [];
     let assistantStreamStarted = false;
