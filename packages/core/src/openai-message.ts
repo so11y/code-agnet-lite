@@ -1,69 +1,56 @@
-import type {
-  ChatCompletion,
-  ChatCompletionMessageParam,
-  ChatCompletionMessageToolCall
-} from 'openai/resources/chat/completions';
-import {z} from 'zod';
-import {parseJsonObject, truncate} from '@code-agent-lite/shared';
+import type {AgentMessage} from './session-types.js';
 
-export function messageText(content: ChatCompletionMessageParam['content']) {
-  if (!content) {
-    return;
+export function messageText(content: AgentMessage['content']): string | undefined {
+  if (typeof content === 'string') {
+    return content || undefined;
   }
 
-  return typeof content === 'string' ? content : JSON.stringify(content);
+  const text = content
+    .flatMap((part) => {
+      if ('text' in part && typeof part.text === 'string') {
+        return [part.text];
+      }
+
+      if (part.type !== 'tool-result') {
+        return [];
+      }
+
+      const output = part.output;
+      if (output.type === 'text' || output.type === 'error-text') {
+        return [output.value];
+      }
+      if (output.type === 'json' || output.type === 'error-json') {
+        return [JSON.stringify(output.value)];
+      }
+      if (output.type === 'execution-denied') {
+        return output.reason ? [output.reason] : [];
+      }
+
+      return output.value.flatMap((item) => (item.type === 'text' ? [item.text] : []));
+    })
+    .join('');
+  return text || undefined;
 }
 
-export function parseToolArgs(toolCall: ChatCompletionMessageToolCall) {
-  try {
-    return JSON.parse(toolCall.function.arguments || '{}');
-  } catch {
-    return {};
-  }
-}
-
-export function getAssistantMessage(response: ChatCompletion) {
-  if (!Array.isArray(response.choices)) {
-    throw new Error(
-      `LLM 响应不符合 OpenAI 格式：缺少 choices 数组。原始响应：${truncate(
-        JSON.stringify(response)
-      )}`
-    );
-  }
-
-  const message = response.choices[0]?.message;
-  if (!message) {
-    throw new Error(`模型未返回 assistant 消息。原始响应：${truncate(JSON.stringify(response))}`);
-  }
-
-  return message;
-}
-
-export function extractAssistantText(response: ChatCompletion): string {
-  return messageText(getAssistantMessage(response).content) ?? '';
-}
-
-export function parseAssistantJson<T extends z.ZodTypeAny>(
-  response: ChatCompletion,
-  schema: T
-): z.infer<T> {
-  return schema.parse(parseJsonObject(extractAssistantText(response)));
-}
-
-export function agentMessageText(message: ChatCompletionMessageParam): string {
+export function agentMessageText(message: AgentMessage): string {
   const content = messageText(message.content);
   if (content) {
     return content;
   }
 
-  if ('tool_calls' in message && message.tool_calls?.length) {
-    return `工具调用：${message.tool_calls.map((call) => call.function.name).join('、')}`;
+  if (message.role === 'assistant' && Array.isArray(message.content)) {
+    const toolNames = message.content.flatMap((part) =>
+      part.type === 'tool-call' ? [part.toolName] : []
+    );
+    if (toolNames.length) {
+      return `工具调用：${toolNames.join('、')}`;
+    }
   }
 
   return '';
 }
 
-export function formatSessionTranscript(messages: ChatCompletionMessageParam[]): string {
+export function formatSessionTranscript(messages: AgentMessage[]): string {
   return messages
     .map((message) => `${message.role}: ${agentMessageText(message)}`)
     .filter((line) => line.trim())

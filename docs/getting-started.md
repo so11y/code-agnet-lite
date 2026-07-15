@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-Node.js 18+、Git、OpenAI 兼容 API（或 Cursor API Key）。
+Node.js 22+、Git、OpenAI 兼容 API（或 Cursor API Key）。
 
 ## 安装与启动
 

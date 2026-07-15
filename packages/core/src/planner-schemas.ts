@@ -1,4 +1,3 @@
-import {zodToJsonSchema} from 'zod-to-json-schema';
 import {z} from 'zod';
 
 /** Planner 输出：工作假设与验证计划（对应 session.ledger.state.hypotheses） */
@@ -41,8 +40,7 @@ export const reviewSchema = z.object({
 export type Plan = z.infer<typeof planSchema>;
 export type PlanReview = z.infer<typeof reviewSchema>;
 
-export function formatSchemaForPrompt(schema: z.ZodTypeAny): string {
-  const jsonSchema = zodToJsonSchema(schema, {$refStrategy: 'none'});
-  const {$schema: _, ...rest} = jsonSchema as Record<string, unknown> & {$schema?: string};
-  return JSON.stringify(rest, null, 2);
+export function formatSchemaForPrompt(schema: z.ZodType): string {
+  const {$schema: _, ...jsonSchema} = z.toJSONSchema(schema, {reused: 'inline'});
+  return JSON.stringify(jsonSchema, null, 2);
 }

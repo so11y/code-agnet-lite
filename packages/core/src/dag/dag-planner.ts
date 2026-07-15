@@ -1,4 +1,3 @@
-import {formatSchemaForPrompt} from '../planner-schemas.js';
 import {DAG_PLAN_PROMPT, DAG_SUBGRAPH_REPLAN_PROMPT, formatTurnUserMessage} from '../prompt.js';
 import type {AgentSession} from '../session.js';
 import {callStructuredLlmOrThrow} from '../structured-llm-caller.js';
@@ -9,9 +8,6 @@ import {
   dagSubgraphPlanSchema,
   type DagSubgraphPlan
 } from './dag-schemas.js';
-
-const DAG_JSON_SCHEMA = formatSchemaForPrompt(dagPlanSchema);
-const DAG_SUBGRAPH_JSON_SCHEMA = formatSchemaForPrompt(dagSubgraphPlanSchema);
 
 type SubgraphReplanContext = {
   replanSet: string[];
@@ -26,17 +22,12 @@ type SubgraphReplanContext = {
 
 export async function llmPlanDag(input: string, session: AgentSession): Promise<TaskGraph> {
   session.events.status('thinking', 'DAG 规划');
-  const skillPrompts = session.skills.loadedPromptNotes();
 
   const plan = await callStructuredLlmOrThrow({
     messages: [
       {
         role: 'system',
-        content: [
-          DAG_PLAN_PROMPT,
-          ...skillPrompts,
-          `只返回 JSON，并符合以下 JSON Schema：\n${DAG_JSON_SCHEMA}`
-        ].join('\n\n')
+        content: [DAG_PLAN_PROMPT, ...session.skills.loadedPromptNotes()].join('\n\n')
       },
       {
         role: 'user',
@@ -56,17 +47,12 @@ export async function llmReplanSubgraph(
   context: SubgraphReplanContext
 ): Promise<DagSubgraphPlan> {
   session.events.status('thinking', 'DAG 链级重规划');
-  const skillPrompts = session.skills.loadedPromptNotes();
 
   const plan = await callStructuredLlmOrThrow({
     messages: [
       {
         role: 'system',
-        content: [
-          DAG_SUBGRAPH_REPLAN_PROMPT,
-          ...skillPrompts,
-          `只返回 JSON，并符合以下 JSON Schema：\n${DAG_SUBGRAPH_JSON_SCHEMA}`
-        ].join('\n\n')
+        content: [DAG_SUBGRAPH_REPLAN_PROMPT, ...session.skills.loadedPromptNotes()].join('\n\n')
       },
       {
         role: 'user',

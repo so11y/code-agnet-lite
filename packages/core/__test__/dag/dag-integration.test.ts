@@ -50,9 +50,7 @@ describe('DAG parent session integration', () => {
     mocks.plainChat.mockReset();
     mocks.plan.mockImplementation(async () => TaskGraph.fromPlan(tasks));
     mocks.replan.mockResolvedValue({tasks});
-    mocks.plainChat.mockResolvedValue({
-      choices: [{message: {role: 'assistant', content: 'merged answer'}}]
-    });
+    mocks.plainChat.mockResolvedValue('merged answer');
   });
 
   it('commits the final answer and all worker memory to the parent session', async () => {

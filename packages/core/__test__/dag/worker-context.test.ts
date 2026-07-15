@@ -50,12 +50,12 @@ describe('DagWorker parent context', () => {
         if (call === 1) {
           return {
             role: 'assistant',
-            content: null,
-            tool_calls: [
+            content: [
               {
-                id: 'unknown',
-                type: 'function',
-                function: {name: 'unknown_tool', arguments: '{}'}
+                type: 'tool-call',
+                toolCallId: 'unknown',
+                toolName: 'unknown_tool',
+                input: {}
               }
             ]
           };

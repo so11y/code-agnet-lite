@@ -1,19 +1,33 @@
-import type {
-  ChatCompletionAssistantMessageParam,
-  ChatCompletionMessageToolCall
-} from 'openai/resources/chat/completions';
-import {parseToolArgs} from './openai-message.js';
-import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
-import {formatError, normalizeToolResult, truncate, TurnAbortedError, withTimeout} from '@code-agent-lite/shared';
-import {formatSkillLoadResult} from '@code-agent-lite/tools';
-import {AgentSession} from './session.js';
-import type {AgentMessage, AgentSessionOptions, LlmStreamOptions, ToolCallItem} from './session-types.js';
 import type {AgentTool} from '@code-agent-lite/tools';
+import {formatSkillLoadResult} from '@code-agent-lite/tools';
+import {
+  formatError,
+  normalizeToolResult,
+  truncate,
+  TurnAbortedError,
+  withTimeout
+} from '@code-agent-lite/shared';
+import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
+import {AgentSession} from './session.js';
+import type {
+  AgentMessage,
+  AgentSessionOptions,
+  AssistantMessage,
+  LlmStreamOptions,
+  ToolCall,
+  ToolCallItem
+} from './session-types.js';
 
 export type AgentRunResult = {
   steps: number;
   reason: 'final_answer' | 'max_steps';
 };
+
+function messageToolCalls(message: AssistantMessage): ToolCall[] {
+  return typeof message.content === 'string'
+    ? []
+    : message.content.filter((part): part is ToolCall => part.type === 'tool-call');
+}
 
 export abstract class ReActAgent {
   protected readonly maxSteps: number;
@@ -53,7 +67,6 @@ export abstract class ReActAgent {
             this.session.events.startThinkingStream();
             streamedThinking = true;
           }
-
           this.session.events.appendThinkingDelta(delta);
         },
         onDelta: (delta) => {
@@ -62,11 +75,9 @@ export abstract class ReActAgent {
               this.session.events.endThinkingStream();
               streamedThinking = false;
             }
-
             this.session.events.startAssistantStream();
             streamed = true;
           }
-
           this.session.events.appendAssistantDelta(delta);
         }
       });
@@ -76,12 +87,13 @@ export abstract class ReActAgent {
       }
 
       this.session.conversation.commitAssistant(message, streamed);
+      const toolCalls = messageToolCalls(message);
 
-      if (!message.tool_calls?.length) {
+      if (!toolCalls.length) {
         return {steps: step, reason: 'final_answer'};
       }
 
-      for (const toolCall of message.tool_calls) {
+      for (const toolCall of toolCalls) {
         this.session.throwIfAborted();
         await this.runTool(toolCall);
       }
@@ -93,7 +105,7 @@ export abstract class ReActAgent {
   protected abstract streamLlm(
     messages: AgentMessage[],
     options: LlmStreamOptions
-  ): Promise<ChatCompletionAssistantMessageParam>;
+  ): Promise<AssistantMessage>;
 
   protected abstract findTool(name: string): AgentTool | undefined;
 
@@ -101,26 +113,29 @@ export abstract class ReActAgent {
     return 60_000;
   }
 
-  protected async runTool(toolCall: ChatCompletionMessageToolCall) {
-    const input = parseToolArgs(toolCall);
-    const call: ToolCallItem = {id: toolCall.id, name: toolCall.function.name, input};
+  protected async runTool(toolCall: ToolCall) {
+    const call: ToolCallItem = {
+      id: toolCall.toolCallId,
+      name: toolCall.toolName,
+      input: toolCall.input
+    };
     const tool = this.findTool(call.name);
 
     this.session.events.startTool(call);
 
     if (!tool) {
-      this.failTool(call.id, `未知工具：${call.name}`);
+      this.failTool(call, `未知工具：${call.name}`);
       return;
     }
 
-    const parsed = tool.schema.safeParse(input);
+    const parsed = tool.schema.safeParse(call.input);
     if (!parsed.success) {
-      this.failTool(call.id, parsed.error.message);
+      this.failTool(call, parsed.error.message);
       return;
     }
 
     if (!(await this.beforeToolExecute(call.name, parsed.data))) {
-      this.failTool(call.id, '工具调用被 Worker 策略拒绝');
+      this.failTool(call, '工具调用被 Worker 策略拒绝');
       return;
     }
 
@@ -137,7 +152,6 @@ export abstract class ReActAgent {
                 if (!outcome) {
                   return this.session.skills.registry.formatNotFound(name);
                 }
-
                 return formatSkillLoadResult(outcome.skill.name, outcome.injected);
               }
             }),
@@ -155,8 +169,7 @@ export abstract class ReActAgent {
       if (error instanceof TurnAbortedError) {
         throw error;
       }
-
-      this.failTool(call.id, formatError(error));
+      this.failTool(call, formatError(error));
     }
   }
 
@@ -164,7 +177,11 @@ export abstract class ReActAgent {
     return true;
   }
 
-  private failTool(id: string, message: string) {
-    this.session.conversation.finishTool(id, message, {error: message});
+  private failTool(call: ToolCallItem, message: string) {
+    this.session.conversation.finishTool(call.id, message, {
+      error: message,
+      toolName: call.name,
+      toolInput: call.input
+    });
   }
 }

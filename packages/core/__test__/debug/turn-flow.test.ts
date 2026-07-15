@@ -22,8 +22,11 @@ vi.mock('../../src/provider/openai-provider.js', async (importOriginal) => {
           content: 'debug: defaultPlugins agent 回复'
         };
       }),
-      chatWithTools: vi.fn(),
-      plainChat: vi.fn()
+      plainChat: vi.fn(),
+      structuredChat: vi.fn(async () => ({
+        text: '',
+        value: {shouldVerify: false, reason: 'test'}
+      }))
     }
   };
 });

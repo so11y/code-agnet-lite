@@ -1,12 +1,14 @@
 import type {AgentTool} from '@code-agent-lite/tools';
 import {formatSkillCatalog} from '@code-agent-lite/tools';
-import type {
-  ChatCompletionAssistantMessageParam,
-  ChatCompletionMessageToolCall
-} from 'openai/resources/chat/completions';
 import {buildCursorTurnPrompt} from '../prompt.js';
 import {messageText} from '../openai-message.js';
-import type {AgentMessage, LlmStreamOptions, ToolCallItem} from '../session-types.js';
+import type {
+  AgentMessage,
+  AssistantMessage,
+  LlmStreamOptions,
+  ToolCall,
+  ToolCallItem
+} from '../session-types.js';
 import {ReActAgent, type AgentRunResult} from '../react-agent.js';
 import {
   mapCursorStreamEvent,
@@ -17,13 +19,27 @@ import {
 import {getCursorSessionPool} from './cursor-session-pool.js';
 import {normalizeCursorUsage, recordTokenUsage} from './token-usage.js';
 
+function cursorAssistantMessage(text: string | undefined, toolCalls: ToolCall[]): AssistantMessage {
+  if (!toolCalls.length) {
+    return {role: 'assistant', content: text ?? ''};
+  }
+
+  return {
+    role: 'assistant',
+    content: [
+      ...(text ? [{type: 'text' as const, text}] : []),
+      ...toolCalls
+    ]
+  };
+}
+
 export class CursorCodeAgent extends ReActAgent {
   async run(): Promise<AgentRunResult> {
     this.session.events.status('thinking', 'Cursor Agent');
 
     const agent = await getCursorSessionPool().ensure(this.session, this.session.cwd);
     const openTools = new Map<string, ToolCallItem>();
-    const completedToolCalls: ChatCompletionMessageToolCall[] = [];
+    const completedToolCalls: ToolCall[] = [];
     let assistantStreamStarted = false;
 
     const userInput = this.session.ledger.collectTurnRecord(
@@ -66,16 +82,15 @@ export class CursorCodeAgent extends ReActAgent {
     }
 
     const text = result.result?.trim();
-    const toolCalls = completedToolCalls.length ? completedToolCalls : undefined;
 
     if (assistantStreamStarted) {
       this.session.conversation.commitAssistant(
-        {role: 'assistant', content: text || null, tool_calls: toolCalls},
+        cursorAssistantMessage(text, completedToolCalls),
         true
       );
-    } else if (text || toolCalls) {
+    } else if (text || completedToolCalls.length) {
       this.session.conversation.commitAssistant(
-        {role: 'assistant', content: text || null, tool_calls: toolCalls},
+        cursorAssistantMessage(text, completedToolCalls),
         false
       );
     } else {
@@ -85,19 +100,17 @@ export class CursorCodeAgent extends ReActAgent {
     return {steps: 1, reason: 'final_answer'};
   }
 
-  private cursorStreamSink(completedToolCalls: ChatCompletionMessageToolCall[]): CursorStreamMapperSink {
+  private cursorStreamSink(completedToolCalls: ToolCall[]): CursorStreamMapperSink {
     return {
       startTool: (call) => this.session.events.startTool(call),
       finishTool: (id, output, options) => {
         if (options?.toolName) {
           this.session.ledger.recordToolCall(options.toolName, options.toolInput ?? {});
           completedToolCalls.push({
-            id,
-            type: 'function',
-            function: {
-              name: options.toolName,
-              arguments: JSON.stringify(options.toolInput ?? {})
-            }
+            type: 'tool-call',
+            toolCallId: id,
+            toolName: options.toolName,
+            input: options.toolInput ?? {}
           });
         }
 
@@ -111,7 +124,7 @@ export class CursorCodeAgent extends ReActAgent {
   protected async streamLlm(
     _messages: AgentMessage[],
     _options: LlmStreamOptions
-  ): Promise<ChatCompletionAssistantMessageParam> {
+  ): Promise<AssistantMessage> {
     throw new Error('CursorCodeAgent 不使用 OpenAI streamLlm');
   }
 

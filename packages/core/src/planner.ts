@@ -1,5 +1,5 @@
 import {clamp} from 'lodash-es';
-import {extractAssistantText, formatSessionTranscript} from './openai-message.js';
+import {formatSessionTranscript} from './openai-message.js';
 import {formatError, formatList, joinSections} from '@code-agent-lite/shared';
 import {type Plan, type PlanReview, planSchema, reviewSchema} from './planner-schemas.js';
 import {buildPlanPrompt, REVIEW_TOT_PROMPT} from './prompt.js';
@@ -62,8 +62,7 @@ async function requestPlan(
     ],
     schema: planSchema,
     llmOptions: session.llmOptions(),
-    onParseError(response) {
-      const text = extractAssistantText(response);
+    onParseError(text) {
       session.conversation.addSystemNote(`${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`);
       return undefined;
     }
@@ -133,8 +132,7 @@ export async function updateStateFromRun(
     ],
     schema: reviewSchema,
     llmOptions: session.llmOptions(),
-    onParseError(response) {
-      const text = extractAssistantText(response);
+    onParseError(text) {
       session.conversation.addSystemNote(`运行复盘解析失败。原始输出：\n\n${text}`);
       return undefined;
     }

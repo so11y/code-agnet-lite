@@ -1,15 +1,8 @@
-import type {ChatCompletionAssistantMessageParam} from 'openai/resources/chat/completions';
 import {messageText} from '../openai-message.js';
 import {createWorkspaceSystemMessages, formatWorkspaceContext} from '../prompt.js';
-import type {AgentMessage} from '../session-types.js';
+import type {AgentMessage, AssistantMessage} from '../session-types.js';
 import type {SessionEventBus} from './event-bus.js';
 import type {FinishToolOptions} from './finish-tool-options.js';
-
-const assistantMessage = (message: ChatCompletionAssistantMessageParam): AgentMessage => ({
-  role: 'assistant',
-  content: message.content ?? null,
-  tool_calls: message.tool_calls
-});
 
 export class ConversationStore {
   readonly messages: AgentMessage[];
@@ -40,8 +33,8 @@ export class ConversationStore {
     }
   }
 
-  commitAssistant(message: ChatCompletionAssistantMessageParam, streamed: boolean) {
-    this.messages.push(assistantMessage(message));
+  commitAssistant(message: AssistantMessage, streamed: boolean) {
+    this.messages.push(message);
 
     if (streamed) {
       this.events.commitAssistantStream();
@@ -54,7 +47,7 @@ export class ConversationStore {
     }
   }
 
-  addAssistant(message: ChatCompletionAssistantMessageParam) {
+  addAssistant(message: AssistantMessage) {
     this.commitAssistant(message, false);
   }
 
@@ -90,7 +83,19 @@ export class ConversationStore {
   }
 
   finishTool(id: string, content: string, options?: FinishToolOptions) {
-    this.messages.push({role: 'tool', tool_call_id: id, content});
+    this.messages.push({
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: id,
+          toolName: options?.toolName ?? 'unknown_tool',
+          output: options?.error
+            ? {type: 'error-text', value: content}
+            : {type: 'text', value: content}
+        }
+      ]
+    });
     this.events.finishTool(id, content, options);
   }
 

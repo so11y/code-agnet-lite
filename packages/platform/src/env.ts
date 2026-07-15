@@ -1,16 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import {existsSync} from 'node:fs';
 import path from "node:path";
-
-function unquote(value: string): string {
-  const trimmed = value.trim();
-  const quote = trimmed[0];
-
-  if ((quote === '"' || quote === "'") && trimmed.endsWith(quote)) {
-    return trimmed.slice(1, -1);
-  }
-
-  return trimmed;
-}
+import {loadEnvFile} from 'node:process';
 
 export function loadDotEnv(cwd: string): void {
   const envPath = path.join(cwd, ".env");
@@ -19,28 +9,7 @@ export function loadDotEnv(cwd: string): void {
     return;
   }
 
-  const lines = readFileSync(envPath, "utf8").split(/\r?\n/);
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = trimmed.indexOf("=");
-
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = unquote(trimmed.slice(separatorIndex + 1));
-
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
+  loadEnvFile(envPath);
 }
 
 export function getRequiredOpenAiApiKey(): string {

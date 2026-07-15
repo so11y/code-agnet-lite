@@ -2,6 +2,8 @@
 
 用于学习 Agent 内部机制的最小终端 Code Agent（TypeScript + Ink + OpenAI / Cursor）。在本地工作区读代码、改代码、跑命令。
 
+运行环境需要 Node.js 22+。
+
 ## 快速开始
 
 ```bash

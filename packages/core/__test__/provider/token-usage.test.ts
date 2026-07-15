@@ -1,13 +1,22 @@
 import {describe, expect, it} from 'vitest';
-import {normalizeCursorUsage, normalizeOpenAiUsage} from '../../src/provider/token-usage.js';
+import {normalizeAiSdkUsage, normalizeCursorUsage} from '../../src/provider/token-usage.js';
 
-describe('normalizeOpenAiUsage', () => {
+describe('normalizeAiSdkUsage', () => {
   it('maps prompt and completion tokens', () => {
     expect(
-      normalizeOpenAiUsage({
-        prompt_tokens: 80,
-        completion_tokens: 20,
-        total_tokens: 100
+      normalizeAiSdkUsage({
+        inputTokens: 80,
+        outputTokens: 20,
+        totalTokens: 100,
+        inputTokenDetails: {
+          noCacheTokens: 80,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0
+        },
+        outputTokenDetails: {
+          textTokens: 20,
+          reasoningTokens: 0
+        }
       })
     ).toEqual({
       prompt: 80,

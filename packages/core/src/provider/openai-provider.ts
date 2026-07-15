@@ -1,200 +1,184 @@
-import OpenAI from 'openai';
-import type {
-  ChatCompletion,
-  ChatCompletionAssistantMessageParam
-} from 'openai/resources/chat/completions';
+import {createOpenAI} from '@ai-sdk/openai';
 import type {AgentTool} from '@code-agent-lite/tools';
-import {createDefaultToolRegistry} from '../tool-registry.js';
+import {
+  Output,
+  generateText,
+  streamText,
+  tool,
+  type LanguageModel,
+  type ToolSet
+} from 'ai';
+import {z} from 'zod';
 import {
   getOpenAiBaseUrl,
   getOpenAiModel,
   getRequiredOpenAiApiKey,
   isThinkingEnabled
 } from '@code-agent-lite/platform';
-import type {AgentMessage, TokenUsage} from '../session-types.js';
-import {normalizeOpenAiUsage} from './token-usage.js';
-import type {LlmOptions, LlmProvider, LlmStreamOptions} from './types.js';
+import {createDefaultToolRegistry} from '../tool-registry.js';
+import type {AgentMessage, AssistantMessage, ToolCall} from '../session-types.js';
+import {normalizeAiSdkUsage, recordTokenUsage} from './token-usage.js';
+import type {
+  LlmOptions,
+  LlmProvider,
+  LlmStreamOptions,
+  StructuredLlmResult
+} from './types.js';
 
 const DEFAULT_MODEL = '';
+let sharedModel: LanguageModel | undefined;
 
-type ReasoningMessage = {
-  reasoning_content?: string | null;
-};
-
-function thinkingExtraBody(): {enable_thinking: boolean} | undefined {
-  return isThinkingEnabled() ? {enable_thinking: true} : undefined;
-}
-
-function readReasoningContent(message: unknown): string | undefined {
-  const reasoning = (message as ReasoningMessage | undefined)?.reasoning_content;
-  return typeof reasoning === 'string' && reasoning.trim() ? reasoning : undefined;
-}
-
-function emitPlainReasoning(session: LlmOptions['session'], message: unknown) {
-  const reasoning = readReasoningContent(message);
-  if (!reasoning || !session) {
-    return;
+async function fetchWithThinking(input: RequestInfo | URL, init?: RequestInit) {
+  if (!isThinkingEnabled() || typeof init?.body !== 'string') {
+    return globalThis.fetch(input, init);
   }
 
-  session.events.say('thinking', reasoning);
-}
-
-let sharedClient: OpenAI | undefined;
-
-function createClient() {
-  if (!sharedClient) {
-    sharedClient = new OpenAI({
-      apiKey: getRequiredOpenAiApiKey(),
-      baseURL: getOpenAiBaseUrl()
+  try {
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    return globalThis.fetch(input, {
+      ...init,
+      body: JSON.stringify({...body, enable_thinking: true})
     });
+  } catch {
+    return globalThis.fetch(input, init);
   }
-
-  return sharedClient;
 }
 
-function resolveTools(session: LlmOptions['session']): readonly AgentTool[] {
-  return session ? session.toolRegistry.tools : createDefaultToolRegistry().tools;
+function defaultModel(): LanguageModel {
+  sharedModel ??= createOpenAI({
+    apiKey: getRequiredOpenAiApiKey(),
+    baseURL: getOpenAiBaseUrl(),
+    fetch: fetchWithThinking
+  }).chat(getOpenAiModel(DEFAULT_MODEL));
+  return sharedModel;
+}
+
+function resolveTools(session: LlmOptions['session']): ToolSet {
+  const tools = session ? session.toolRegistry.tools : createDefaultToolRegistry().tools;
+  return Object.fromEntries(
+    tools.map((agentTool: AgentTool) => [
+      agentTool.name,
+      tool({description: agentTool.description, inputSchema: agentTool.schema})
+    ])
+  );
+}
+
+function toToolCall(id: string, name: string, input: unknown): ToolCall {
+  return {type: 'tool-call', toolCallId: id, toolName: name, input};
 }
 
 export class OpenAiLlmProvider implements LlmProvider {
   readonly kind = 'openai' as const;
 
-  private createChatCompletion(messages: AgentMessage[], withTools: boolean, options?: LlmOptions) {
-    const thinking = thinkingExtraBody();
-    const toolList = resolveTools(options?.session);
+  constructor(private readonly modelOverride?: LanguageModel) {}
 
-    return createClient().chat.completions.create(
-      {
-        model: getOpenAiModel(DEFAULT_MODEL),
-        messages,
-        ...(thinking ? {extra_body: thinking} : {}),
-        ...(withTools
-          ? {
-              tools: toolList.map((tool) => tool.openaiTool),
-              tool_choice: 'auto' as const
-            }
-          : {})
-      },
-      options?.signal ? {signal: options.signal} : undefined
-    );
+  private model() {
+    return this.modelOverride ?? defaultModel();
   }
 
-  private async completeChat(
-    messages: AgentMessage[],
-    withTools: boolean,
-    options?: LlmOptions
-  ): Promise<ChatCompletion> {
-    const response = await this.createChatCompletion(messages, withTools, options);
-    const usage = normalizeOpenAiUsage(response.usage);
-    if (usage && options?.session) {
-      options.session.events.recordTokenUsage(usage);
+  private recordUsage(
+    options: LlmOptions | undefined,
+    usage: Parameters<typeof normalizeAiSdkUsage>[0]
+  ) {
+    recordTokenUsage(options?.session?.events, normalizeAiSdkUsage(usage));
+  }
+
+  private emitReasoning(options: LlmOptions | undefined, reasoning?: string) {
+    if (reasoning && options?.session) {
+      options.session.events.say('thinking', reasoning);
     }
-    emitPlainReasoning(options?.session, response.choices[0]?.message);
-    return response;
   }
 
-  async chatWithTools(messages: AgentMessage[], options?: LlmOptions): Promise<ChatCompletion> {
-    return this.completeChat(messages, true, options);
+  async plainChat(messages: AgentMessage[], options?: LlmOptions): Promise<string> {
+    const result = await generateText({
+      model: this.model(),
+      messages,
+      allowSystemInMessages: true,
+      abortSignal: options?.signal
+    });
+
+    this.recordUsage(options, result.usage);
+    this.emitReasoning(options, result.reasoningText);
+    return result.text;
   }
 
-  async plainChat(messages: AgentMessage[], options?: LlmOptions): Promise<ChatCompletion> {
-    return this.completeChat(messages, false, options);
+  async structuredChat<TSchema extends z.ZodTypeAny>(
+    messages: AgentMessage[],
+    schema: TSchema,
+    options?: LlmOptions
+  ): Promise<StructuredLlmResult<z.infer<TSchema>>> {
+    const result = await generateText({
+      model: this.model(),
+      messages,
+      allowSystemInMessages: true,
+      output: Output.object({schema}),
+      abortSignal: options?.signal
+    });
+
+    this.recordUsage(options, result.usage);
+    this.emitReasoning(options, result.reasoningText);
+
+    try {
+      return {text: result.text, value: result.output as z.infer<TSchema>};
+    } catch (error) {
+      return {text: result.text, error};
+    }
   }
 
   async streamWithTools(
     messages: AgentMessage[],
     options: LlmStreamOptions
-  ): Promise<ChatCompletionAssistantMessageParam> {
-    const thinking = thinkingExtraBody();
-    const toolList = resolveTools(options.session);
+  ): Promise<AssistantMessage> {
+    const result = streamText({
+      model: this.model(),
+      messages,
+      allowSystemInMessages: true,
+      tools: resolveTools(options.session),
+      toolChoice: 'auto',
+      abortSignal: options.signal
+    });
 
-    const stream = await createClient().chat.completions.create(
-      {
-        model: getOpenAiModel(DEFAULT_MODEL),
-        messages,
-        stream: true,
-        stream_options: {include_usage: true},
-        ...(thinking ? {extra_body: thinking} : {}),
-        tools: toolList.map((tool) => tool.openaiTool),
-        tool_choice: 'auto'
-      },
-      options.signal ? {signal: options.signal} : undefined
-    );
-
-    let content = '';
+    let text = '';
     let reasoning = '';
-    let usage: TokenUsage | undefined;
-    const toolCallsByIndex = new Map<
-      number,
-      {id: string; name: string; arguments: string}
-    >();
+    const toolCalls: ToolCall[] = [];
 
-    for await (const chunk of stream) {
-      if (chunk.usage) {
-        usage = normalizeOpenAiUsage(chunk.usage);
-      }
-
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) {
-        continue;
-      }
-
-      const reasoningDelta = readReasoningContent(delta);
-      if (reasoningDelta) {
-        reasoning += reasoningDelta;
-        options.onReasoningDelta?.(reasoningDelta);
-      }
-
-      if (delta.content) {
-        content += delta.content;
-        options.onDelta(delta.content);
-      }
-
-      if (delta.tool_calls) {
-        for (const toolCallDelta of delta.tool_calls) {
-          const index = toolCallDelta.index ?? 0;
-          let toolCall = toolCallsByIndex.get(index);
-
-          if (!toolCall) {
-            toolCall = {id: '', name: '', arguments: ''};
-            toolCallsByIndex.set(index, toolCall);
-          }
-
-          if (toolCallDelta.id) {
-            toolCall.id = toolCallDelta.id;
-          }
-
-          if (toolCallDelta.function?.name) {
-            toolCall.name += toolCallDelta.function.name;
-          }
-
-          if (toolCallDelta.function?.arguments) {
-            toolCall.arguments += toolCallDelta.function.arguments;
-          }
-        }
+    for await (const part of result.stream) {
+      switch (part.type) {
+        case 'text-delta':
+          text += part.text;
+          options.onDelta(part.text);
+          break;
+        case 'reasoning-delta':
+          reasoning += part.text;
+          options.onReasoningDelta?.(part.text);
+          break;
+        case 'tool-call':
+          toolCalls.push(toToolCall(part.toolCallId, part.toolName, part.input));
+          break;
+        case 'error':
+          throw part.error;
       }
     }
 
-    if (usage && options.session) {
-      options.session.events.recordTokenUsage(usage);
-    }
+    this.recordUsage(options, await result.usage);
 
-    const toolCalls = [...toolCallsByIndex.entries()]
-      .sort(([left], [right]) => left - right)
-      .map(([, toolCall]) => ({
-        id: toolCall.id,
-        type: 'function' as const,
-        function: {
-          name: toolCall.name,
-          arguments: toolCall.arguments
-        }
-      }));
+    const finalText = text || (await result.text);
+    const finalReasoning = reasoning || (await result.reasoningText) || '';
+    const finalToolCalls = toolCalls.length
+      ? toolCalls
+      : (await result.toolCalls).map((call) =>
+          toToolCall(call.toolCallId, call.toolName, call.input)
+        );
+
+    if (finalReasoning && !reasoning) {
+      options.onReasoningDelta?.(finalReasoning);
+    }
 
     return {
       role: 'assistant',
-      content: content || null,
-      ...(reasoning ? {reasoning_content: reasoning} : {}),
-      ...(toolCalls.length ? {tool_calls: toolCalls} : {})
+      content: finalToolCalls.length
+        ? [...(finalText ? [{type: 'text' as const, text: finalText}] : []), ...finalToolCalls]
+        : finalText
     };
   }
 }

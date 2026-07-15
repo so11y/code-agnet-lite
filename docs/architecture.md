@@ -197,16 +197,16 @@ agentProviders.plugin()   // 挂进 defaultPlugins，prepareAgent 时 resolve
 
 | key | provide | dispose |
 |-----|---------|---------|
-| openai | `DefaultCodeAgent`（ReAct + OpenAI tool loop） | — |
+| openai | `DefaultCodeAgent`（本地 ReAct + AI SDK tool calling） | — |
 | cursor | `CursorCodeAgent`（Cursor SDK） | 释放 Cursor SDK 会话 |
 
-`DefaultCodeAgent` 内部通过模块级 `openAiLlm` 调 OpenAI；`CursorCodeAgent` 走 Cursor SDK，不参与本地 tool loop。
+`DefaultCodeAgent` 内部通过模块级 `openAiLlm` 调 AI SDK；`CursorCodeAgent` 走 Cursor SDK，不参与本地 tool loop。
 
 环境变量 `AGENT_PROVIDER=openai|cursor`（见 `packages/platform`）决定默认 backend。
 
 ### 结构化 LLM 层（固定 OpenAI）
 
-Router、Planner、Verify gate、DAG 规划等结构化 JSON 调用，统一走 `structured-llm-caller.ts` → 模块级 **`openAiLlm`**（`OpenAiLlmProvider` 单例）。
+Router、Planner、Verify gate、DAG 规划等结构化调用，统一走 `structured-llm-caller.ts` → 模块级 **`openAiLlm`**（`OpenAiLlmProvider` 单例），由 AI SDK `Output.object()` 和 Zod 4 校验输出。
 
 **当前没有** `resolveLlmProvider()` 或 ProviderRegistry 上的 `.llm` 字段。即使 Agent 执行层选 `cursor`，结构化调用仍使用 OpenAI。
 
