@@ -3,13 +3,20 @@ import {joinSections} from '@code-agent-lite/shared';
 import {DagScheduler} from './dag-scheduler.js';
 import {llmPlanDag, llmReplanSubgraph} from './dag-planner.js';
 import {TaskGraph} from './task-graph.js';
+import {formatTurnContext} from '../turn-context.js';
 import {
   Blackboard,
   TASK_NODE_STATUS,
   type TaskNode
 } from './dag-model.js';
+import {AgentStatus, VerificationOutcome} from '../session-types.js';
 
 const MAX_SUBGRAPH_REPLANS = 1;
+
+export type DagRunResult = {
+  succeeded: boolean;
+  verification?: VerificationOutcome;
+};
 
 class DagOrchestrator {
   private readonly blackboard = new Blackboard();
@@ -21,13 +28,15 @@ class DagOrchestrator {
     private readonly input: string
   ) {}
 
-  async run(): Promise<boolean> {
+  async run(): Promise<DagRunResult> {
     try {
-      this.graph = await llmPlanDag(this.input, this.session);
+      this.graph = await llmPlanDag(this.session);
+      const turnContext = formatTurnContext(this.session);
       await new DagScheduler(this.graph, {
         session: this.session,
         blackboard: this.blackboard,
         userInput: this.input,
+        turnContext,
         tryRecoverFailures: (failed) => this.recover(failed)
       }).run();
       return this.finish();
@@ -50,7 +59,7 @@ class DagOrchestrator {
     );
 
     this.session.events.say('system', `DAG 恢复：重规划节点 ${[...replanSet].join('、')}`);
-    const plan = await llmReplanSubgraph(this.input, this.session, {
+    const plan = await llmReplanSubgraph(this.session, {
       replanSet: [...replanSet],
       failedNodes: failed.map((node) => ({
         id: node.id,
@@ -66,11 +75,15 @@ class DagOrchestrator {
     return true;
   }
 
-  private finish(): boolean {
+  private finish(): DagRunResult {
     const mergeNode = this.graph.mergeNode();
     if (mergeNode?.status === TASK_NODE_STATUS.DONE && mergeNode.output?.summary) {
-      this.session.events.status('done', '完成');
-      return true;
+      const verification = this.verificationOutcome();
+      this.session.events.status(
+        AgentStatus.Done,
+        verification === VerificationOutcome.Skipped ? '完成（无可用验证命令）' : '完成'
+      );
+      return {succeeded: true, verification};
     }
 
     this.graph.pendingNodes().forEach((node) => node.skip());
@@ -80,7 +93,7 @@ class DagOrchestrator {
     const skipped = this.graph.skippedNodes();
 
     if (failed.length > 0 || skipped.length > 0) {
-      this.session.events.status('error', 'DAG 未完整完成');
+      this.session.events.status(AgentStatus.Error, 'DAG 未完整完成');
       this.session.events.say(
         'system',
         joinSections(
@@ -90,14 +103,26 @@ class DagOrchestrator {
           skipped.length > 0 ? `跳过节点：${skipped.map((node) => node.id).join('、')}` : ''
         )
       );
-      return false;
+      return {succeeded: false};
     }
 
-    this.session.events.status('error', 'DAG 未完成 merge 节点');
-    return false;
+    this.session.events.status(AgentStatus.Error, 'DAG 未完成 merge 节点');
+    return {succeeded: false};
+  }
+
+  private verificationOutcome(): VerificationOutcome {
+    const outcomes = [...this.graph.nodes.values()]
+      .filter((node) => node.kind === 'verify')
+      .map((node) => node.output?.verification);
+    if (outcomes.includes(VerificationOutcome.Skipped)) {
+      return VerificationOutcome.Skipped;
+    }
+    return outcomes.includes(VerificationOutcome.Passed)
+      ? VerificationOutcome.Passed
+      : VerificationOutcome.NotRequired;
   }
 }
 
-export function runDagTurn(session: AgentSession, input: string): Promise<boolean> {
+export function runDagTurn(session: AgentSession, input: string): Promise<DagRunResult> {
   return new DagOrchestrator(session, input).run();
 }

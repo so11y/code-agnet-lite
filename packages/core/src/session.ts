@@ -20,12 +20,14 @@ import {TurnLedger} from './session/turn-ledger.js';
 import {PluginDriver} from './plugin/driver.js';
 import {defaultPlugins} from './plugin/builtins.js';
 import {createPluginSessionContext, HookStrategy, PluginHook} from './plugin/types.js';
+import type {TurnExecution} from './turn/execute-mode.js';
 
 type ChildSessionOptions = {
   maxSteps: number;
   onEvent: AgentSessionOptions['onEvent'];
   systemPrompt: string;
   systemNotes?: string[];
+  tools?: ToolRegistry;
 };
 
 export class AgentSession {
@@ -40,6 +42,7 @@ export class AgentSession {
   private readonly stateProjector: StateDeltaProjectorState = createStateDeltaProjectorState();
   private currentCwd: string;
   private currentTurnSignal?: AbortSignal;
+  private turnRunning = false;
 
   constructor(options: AgentSessionOptions) {
     const {cwd, ...config} = options;
@@ -63,6 +66,7 @@ export class AgentSession {
       cwd: this.cwd,
       maxSteps: options.maxSteps,
       onEvent: options.onEvent,
+      tools: options.tools ?? this.toolRegistry,
       plugins: []
     });
     child.currentTurnSignal = this.currentTurnSignal;
@@ -96,8 +100,17 @@ export class AgentSession {
     );
   }
 
-  async runPluginTurn(input: string, cwd?: string): Promise<void> {
-    await this.pluginDriver.run(input, cwd ?? this.cwd, this);
+  async runPluginTurn(input: string, cwd?: string): Promise<TurnExecution | undefined> {
+    if (this.turnRunning) {
+      throw new Error('当前 Session 已有 Turn 正在执行');
+    }
+
+    this.turnRunning = true;
+    try {
+      return (await this.pluginDriver.run(input, cwd ?? this.cwd, this)).execution;
+    } finally {
+      this.turnRunning = false;
+    }
   }
 
   setTurnSignal(signal?: AbortSignal) {
@@ -120,11 +133,12 @@ export class AgentSession {
     flushStateDelta(
       this.stateProjector,
       this.ledger.state,
-      (content) => this.conversation.addSystemNote(content)
+      (content) => this.conversation.addSystemNote(content, {emit: false})
     );
   }
 
   beginTurn(userInput: string) {
+    this.conversation.clearTurnNotes();
     this.ledger.beginTurn(userInput);
     resetTurnOperationsProjection(this.stateProjector);
   }

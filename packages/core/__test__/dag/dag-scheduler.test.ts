@@ -27,7 +27,12 @@ describe('DagScheduler', () => {
   it('runs dependencies correctly even when nodes are not stored in topological order', async () => {
     const graph = TaskGraph.fromPlan([task('merge', ['worker']), task('worker')]);
     const executed: string[] = [];
-    const scheduler = new DagScheduler(graph, {session, blackboard: new Blackboard(), userInput: ''});
+    const scheduler = new DagScheduler(graph, {
+      session,
+      blackboard: new Blackboard(),
+      userInput: '',
+      turnContext: ''
+    });
     Reflect.set(scheduler, 'executeNode', async (node: TaskNode) => {
       executed.push(node.id);
       return output();
@@ -46,7 +51,12 @@ describe('DagScheduler', () => {
       task('independent'),
       task('merge', ['blocked', 'independent'])
     ]);
-    const scheduler = new DagScheduler(graph, {session, blackboard: new Blackboard(), userInput: ''});
+    const scheduler = new DagScheduler(graph, {
+      session,
+      blackboard: new Blackboard(),
+      userInput: '',
+      turnContext: ''
+    });
     Reflect.set(scheduler, 'executeNode', async (node: TaskNode) => {
       if (node.id === 'failed') {
         throw new Error('boom');
@@ -74,6 +84,7 @@ describe('DagScheduler', () => {
       session,
       blackboard: new Blackboard(),
       userInput: '',
+      turnContext: '',
       tryRecoverFailures: async () => {
         recoveries += 1;
         graph.replaceSubgraph({
@@ -99,5 +110,36 @@ describe('DagScheduler', () => {
     expect(workerRuns).toBe(2);
     expect(graph.nodes.get('downstream')!.status).toBe('done');
     expect(graph.nodes.get('merge')!.status).toBe('done');
+  });
+
+  it('serializes edit nodes that share the same working tree', async () => {
+    const graph = TaskGraph.fromPlan([
+      {id: 'explore', kind: 'explore', goal: 'explore', dependsOn: []},
+      {id: 'edit-a', kind: 'edit', goal: 'edit a', dependsOn: ['explore']},
+      {id: 'edit-b', kind: 'edit', goal: 'edit b', dependsOn: ['explore']},
+      {id: 'verify', kind: 'verify', goal: 'verify', dependsOn: ['edit-a', 'edit-b']},
+      {id: 'merge', kind: 'merge', goal: 'merge', dependsOn: ['verify']}
+    ]);
+    let activeEdits = 0;
+    let maxActiveEdits = 0;
+    const scheduler = new DagScheduler(graph, {
+      session,
+      blackboard: new Blackboard(),
+      userInput: '',
+      turnContext: ''
+    });
+    Reflect.set(scheduler, 'executeNode', async (node: TaskNode) => {
+      if (node.kind === 'edit') {
+        activeEdits += 1;
+        maxActiveEdits = Math.max(maxActiveEdits, activeEdits);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        activeEdits -= 1;
+      }
+      return output();
+    });
+
+    await scheduler.run();
+
+    expect(maxActiveEdits).toBe(1);
   });
 });

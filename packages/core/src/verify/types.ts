@@ -4,7 +4,11 @@ export type VerifyResult = {
   output: string;
 };
 
-export type FixLoopAction = 'fix' | 'replan' | 'give-up';
+export enum FixLoopAction {
+  Fix = 'fix',
+  Replan = 'replan',
+  GiveUp = 'give-up'
+}
 
 export const MAX_FIX_ROUNDS = 3;
 export const MAX_REPLAN_ATTEMPTS = 1;
@@ -16,12 +20,12 @@ export function decideFixLoopAction(state: {
   maxReplans: number;
 }): FixLoopAction {
   if (state.fixRound < state.maxFixRounds) {
-    return 'fix';
+    return FixLoopAction.Fix;
   }
 
   if (state.replans < state.maxReplans) {
-    return 'replan';
+    return FixLoopAction.Replan;
   }
 
-  return 'give-up';
+  return FixLoopAction.GiveUp;
 }

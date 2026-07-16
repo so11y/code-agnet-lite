@@ -1,6 +1,6 @@
 import {Box, Text} from 'ink';
 import {Spinner} from './Spinner.js';
-import type {AgentStatus, TokenUsage} from '@code-agent-lite/core';
+import {AgentStatus, type TokenUsage} from '@code-agent-lite/core';
 import {
   contextUsageColor,
   formatContextUsagePercent,
@@ -18,21 +18,21 @@ type Props = {
 };
 
 const statusColor = {
-  idle: 'gray',
-  thinking: 'blue',
-  running_tool: 'yellow',
-  done: 'green',
-  error: 'red',
-  cancelled: 'magenta'
+  [AgentStatus.Idle]: 'gray',
+  [AgentStatus.Thinking]: 'blue',
+  [AgentStatus.RunningTool]: 'yellow',
+  [AgentStatus.Done]: 'green',
+  [AgentStatus.Error]: 'red',
+  [AgentStatus.Cancelled]: 'magenta'
 } as const;
 
 const statusLabel: Record<AgentStatus, string> = {
-  idle: '就绪',
-  thinking: '思考中',
-  running_tool: '运行工具',
-  done: '完成',
-  error: '错误',
-  cancelled: '已终止'
+  [AgentStatus.Idle]: '就绪',
+  [AgentStatus.Thinking]: '思考中',
+  [AgentStatus.RunningTool]: '运行工具',
+  [AgentStatus.Done]: '完成',
+  [AgentStatus.Error]: '错误',
+  [AgentStatus.Cancelled]: '已终止'
 };
 
 function formatStatus(status: AgentStatus, message?: string): string {

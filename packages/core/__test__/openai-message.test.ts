@@ -29,7 +29,7 @@ describe('AI SDK message text', () => {
       }
     ];
 
-    expect(agentMessageText(messages[1])).toBe('{"name":"demo"}');
+    expect(agentMessageText(messages[1]!)).toBe('{"name":"demo"}');
     expect(formatSessionTranscript(messages)).toContain('tool: {"name":"demo"}');
   });
 

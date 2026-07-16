@@ -4,10 +4,17 @@ import type {ToolDisplay} from '@code-agent-lite/shared';
 
 export type {ToolDisplay};
 
-export type AgentStatus = 'idle' | 'thinking' | 'running_tool' | 'done' | 'error' | 'cancelled';
+export enum AgentStatus {
+  Idle = 'idle',
+  Thinking = 'thinking',
+  RunningTool = 'running_tool',
+  Done = 'done',
+  Error = 'error',
+  Cancelled = 'cancelled'
+}
 
 export function isAgentBusy(status: AgentStatus): boolean {
-  return status === 'thinking' || status === 'running_tool';
+  return status === AgentStatus.Thinking || status === AgentStatus.RunningTool;
 }
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool' | 'thinking';

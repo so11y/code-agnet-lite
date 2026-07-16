@@ -1,16 +1,20 @@
-import type {AgentTool} from '@code-agent-lite/tools';
 import {formatSkillCatalog} from '@code-agent-lite/tools';
+import {getContextLimit, getCursorModel} from '@code-agent-lite/platform';
 import {buildCursorTurnPrompt} from '../prompt.js';
 import {messageText} from '../openai-message.js';
-import type {
-  AgentMessage,
-  AssistantMessage,
-  LlmStreamOptions,
-  ToolCall,
-  ToolCallItem
-} from '../session-types.js';
-import {ReActAgent, type AgentRunResult} from '../react-agent.js';
 import {
+  AgentStatus,
+  type AgentMessage,
+  type TokenUsage,
+  type ToolCall,
+  type ToolCallItem
+} from '../session-types.js';
+import type {FinishToolOptions} from '../session/finish-tool-options.js';
+import type {CodeAgent} from '../code-agent.js';
+import {AgentRunReason, type AgentRunResult} from '../react-agent.js';
+import type {AgentSession} from '../session.js';
+import {
+  CursorStreamEventResult,
   mapCursorStreamEvent,
   shouldStartAssistantStream,
   type CursorSdkMessage,
@@ -19,27 +23,36 @@ import {
 import {cursorSessionPool} from './cursor-session-pool.js';
 import {normalizeCursorUsage, recordTokenUsage} from './token-usage.js';
 
-function cursorAssistantMessage(text: string | undefined, toolCalls: ToolCall[]): AssistantMessage {
-  if (!toolCalls.length) {
-    return {role: 'assistant', content: text ?? ''};
-  }
+type CompletedCursorTool = {
+  call: ToolCallItem;
+  output: string;
+  options?: FinishToolOptions;
+};
 
+const MUTATING_TOOLS = new Set(['write_file', 'delete_file', 'run_cmd', 'set_workspace']);
+
+function cursorToolCall(call: ToolCallItem): ToolCall {
   return {
-    role: 'assistant',
-    content: [
-      ...(text ? [{type: 'text' as const, text}] : []),
-      ...toolCalls
-    ]
+    type: 'tool-call',
+    toolCallId: call.id,
+    toolName: call.name,
+    input: call.input
   };
 }
 
-export class CursorCodeAgent extends ReActAgent {
+export class CursorCodeAgent implements CodeAgent {
+  constructor(private readonly session: AgentSession) {}
+
   async run(): Promise<AgentRunResult> {
-    this.session.events.status('thinking', 'Cursor Agent');
+    this.session.events.status(AgentStatus.Thinking, 'Cursor Agent');
 
     const agent = await cursorSessionPool.ensure(this.session, this.session.cwd);
     const openTools = new Map<string, ToolCallItem>();
-    const completedToolCalls: ToolCall[] = [];
+    const completedTools: CompletedCursorTool[] = [];
+    let streamedText = '';
+    const streamSink = this.cursorStreamSink(completedTools, (text) => {
+      streamedText += text;
+    });
     let assistantStreamStarted = false;
 
     const userInput = this.session.ledger.collectTurnRecord(
@@ -49,7 +62,10 @@ export class CursorCodeAgent extends ReActAgent {
       catalog: formatSkillCatalog(this.session.skills.listCatalog()),
       skillNotes: collectSkillNotes(this.session.conversation.messages)
     });
-    const run = await agent.send(prompt);
+    const mode = this.session.toolRegistry.tools.some((tool) => MUTATING_TOOLS.has(tool.name))
+      ? 'agent'
+      : 'plan';
+    const run = await agent.send(prompt, {mode});
     let recordedUsageFromStream = false;
 
     for await (const event of run.stream()) {
@@ -62,8 +78,8 @@ export class CursorCodeAgent extends ReActAgent {
       }
 
       if (
-        mapCursorStreamEvent(message, this.cursorStreamSink(completedToolCalls), openTools) ===
-        'usage'
+        mapCursorStreamEvent(message, streamSink, openTools) ===
+        CursorStreamEventResult.Usage
       ) {
         recordedUsageFromStream = true;
       }
@@ -74,62 +90,71 @@ export class CursorCodeAgent extends ReActAgent {
     const result = await run.wait();
 
     if (!recordedUsageFromStream && result.usage) {
-      recordTokenUsage(this.session.events, normalizeCursorUsage(result.usage));
+      recordTokenUsage(
+        this.session.events,
+        this.withCursorContext(normalizeCursorUsage(result.usage))
+      );
     }
 
     if (result.status === 'error') {
       throw new Error(`Cursor Agent 运行失败（run ${result.id ?? 'unknown'}）`);
     }
 
-    const text = result.result?.trim();
+    const text = result.result?.trim() || streamedText.trim();
 
-    if (assistantStreamStarted) {
+    for (const {call, output, options} of completedTools) {
+      this.session.conversation.recordAssistant({
+        role: 'assistant',
+        content: [cursorToolCall(call)]
+      });
+      this.session.conversation.recordToolResult(call.id, output, options);
+    }
+
+    if (text) {
       this.session.conversation.commitAssistant(
-        cursorAssistantMessage(text, completedToolCalls),
-        true
+        {role: 'assistant', content: text},
+        assistantStreamStarted
       );
-    } else if (text || completedToolCalls.length) {
-      this.session.conversation.commitAssistant(
-        cursorAssistantMessage(text, completedToolCalls),
-        false
-      );
-    } else {
+      return {steps: 1, reason: AgentRunReason.FinalAnswer};
+    }
+
+    if (!completedTools.length) {
       this.session.events.say('assistant', '（Cursor Agent 未返回文本）');
     }
 
-    return {steps: 1, reason: 'final_answer'};
+    return {steps: 1, reason: AgentRunReason.MaxSteps};
   }
 
-  private cursorStreamSink(completedToolCalls: ToolCall[]): CursorStreamMapperSink {
+  private cursorStreamSink(
+    completedTools: CompletedCursorTool[],
+    onText: (text: string) => void
+  ): CursorStreamMapperSink {
     return {
-      startTool: (call) => this.session.events.startTool(call),
-      finishTool: (id, output, options) => {
-        if (options?.toolName) {
-          this.session.ledger.recordToolCall(options.toolName, options.toolInput ?? {});
-          completedToolCalls.push({
-            type: 'tool-call',
-            toolCallId: id,
-            toolName: options.toolName,
-            input: options.toolInput ?? {}
-          });
-        }
-
-        this.session.conversation.finishTool(id, output, options);
+      startTool: (call) => {
+        this.session.ledger.recordToolCall(call.name, call.input);
+        this.session.events.startTool(call);
       },
-      appendAssistantDelta: (text) => this.session.events.appendAssistantDelta(text),
-      recordTokenUsage: (usage) => this.session.events.recordTokenUsage(usage)
+      finishTool: (id, output, options) => {
+        const call = {
+          id,
+          name: options?.toolName ?? 'unknown_tool',
+          input: options?.toolInput ?? {}
+        };
+        completedTools.push({call, output, options});
+        this.session.events.finishTool(id, output, options);
+      },
+      appendAssistantDelta: (text) => {
+        onText(text);
+        this.session.events.appendAssistantDelta(text);
+      },
+      showThinking: (text) => this.session.events.say('thinking', text),
+      recordTokenUsage: (usage) =>
+        this.session.events.recordTokenUsage(this.withCursorContext(usage))
     };
   }
 
-  protected async streamLlm(
-    _messages: AgentMessage[],
-    _options: LlmStreamOptions
-  ): Promise<AssistantMessage> {
-    throw new Error('CursorCodeAgent 不使用 OpenAI streamLlm');
-  }
-
-  protected findTool(_name: string): AgentTool | undefined {
-    return undefined;
+  private withCursorContext(usage: TokenUsage): TokenUsage {
+    return {...usage, contextLimit: getContextLimit(getCursorModel())};
   }
 }
 

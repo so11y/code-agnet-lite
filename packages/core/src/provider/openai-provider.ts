@@ -11,6 +11,7 @@ import {
 import {z} from 'zod';
 import {
   getOpenAiBaseUrl,
+  getContextLimit,
   getOpenAiModel,
   getRequiredOpenAiApiKey,
   isThinkingEnabled
@@ -76,7 +77,20 @@ export class OpenAiLlmProvider implements LlmProvider {
     options: LlmOptions | undefined,
     usage: Parameters<typeof normalizeAiSdkUsage>[0]
   ) {
-    recordTokenUsage(options?.session?.events, normalizeAiSdkUsage(usage));
+    const normalized = normalizeAiSdkUsage(usage);
+    if (!normalized) {
+      return;
+    }
+
+    const modelId =
+      typeof this.modelOverride === 'string'
+        ? this.modelOverride
+        : (this.modelOverride?.modelId ?? getOpenAiModel());
+
+    recordTokenUsage(options?.session?.events, {
+      ...normalized,
+      contextLimit: getContextLimit(modelId)
+    });
   }
 
   private emitReasoning(options: LlmOptions | undefined, reasoning?: string) {
@@ -130,7 +144,7 @@ export class OpenAiLlmProvider implements LlmProvider {
       messages,
       allowSystemInMessages: true,
       tools: resolveTools(options.session),
-      toolChoice: 'auto',
+      toolChoice: options.allowTools === false ? 'none' : 'auto',
       abortSignal: options.signal
     });
 
@@ -170,11 +184,13 @@ export class OpenAiLlmProvider implements LlmProvider {
       options.onReasoningDelta?.(finalReasoning);
     }
 
+    if (!finalToolCalls.length) {
+      return {role: 'assistant', content: finalText};
+    }
+
     return {
       role: 'assistant',
-      content: finalToolCalls.length
-        ? [...(finalText ? [{type: 'text' as const, text: finalText}] : []), ...finalToolCalls]
-        : finalText
+      content: [...(finalText ? [{type: 'text' as const, text: finalText}] : []), ...finalToolCalls]
     };
   }
 }

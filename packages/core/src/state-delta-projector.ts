@@ -6,7 +6,7 @@ import {
   type InjectedSnapshot
 } from './state-ai-view.js';
 import type {SessionState} from './agent-memory.js';
-import {createEmptyTurnOperations} from './types/operations.js';
+import {TurnOperations} from './types/operations.js';
 
 export type StateDeltaProjectorState = {
   lastInjected: InjectedSnapshot;
@@ -23,7 +23,7 @@ export function createStateDeltaProjectorState(): StateDeltaProjectorState {
 export function resetTurnOperationsProjection(projector: StateDeltaProjectorState): void {
   projector.lastInjected = {
     ...projector.lastInjected,
-    operations: createEmptyTurnOperations()
+    operations: new TurnOperations()
   };
 }
 

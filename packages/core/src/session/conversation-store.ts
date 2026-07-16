@@ -7,6 +7,7 @@ import type {FinishToolOptions} from './finish-tool-options.js';
 export class ConversationStore {
   readonly messages: AgentMessage[];
   private workspaceMessage: AgentMessage;
+  private readonly turnNotes: AgentMessage[] = [];
   private skillCatalogMessageIndex?: number;
   private skillCatalogCwd?: string;
   private skillCatalogSyncedCwd?: string;
@@ -15,15 +16,18 @@ export class ConversationStore {
     cwd: string,
     private readonly events: SessionEventBus
   ) {
-    this.messages = createWorkspaceSystemMessages(cwd);
-    this.workspaceMessage = this.messages[1];
+    const messages = createWorkspaceSystemMessages(cwd);
+    this.messages = messages;
+    this.workspaceMessage = messages[1];
   }
 
   resetWorkspace(cwd: string, leadingPrompt?: string) {
     this.invalidateSkillCatalog();
+    const messages = createWorkspaceSystemMessages(cwd, leadingPrompt);
     this.messages.length = 0;
-    this.messages.push(...createWorkspaceSystemMessages(cwd, leadingPrompt));
-    this.workspaceMessage = this.messages[1];
+    this.messages.push(...messages);
+    this.workspaceMessage = messages[1];
+    this.turnNotes.length = 0;
   }
 
   appendUser(content: string, options?: {emit?: boolean}) {
@@ -34,7 +38,7 @@ export class ConversationStore {
   }
 
   commitAssistant(message: AssistantMessage, streamed: boolean) {
-    this.messages.push(message);
+    this.recordAssistant(message);
 
     if (streamed) {
       this.events.commitAssistantStream();
@@ -51,6 +55,10 @@ export class ConversationStore {
     this.commitAssistant(message, false);
   }
 
+  recordAssistant(message: AssistantMessage) {
+    this.messages.push(message);
+  }
+
   addSystemNote(content: string, options?: {emit?: boolean}): AgentMessage {
     const message: AgentMessage = {role: 'system', content};
     this.messages.push(message);
@@ -58,6 +66,17 @@ export class ConversationStore {
       this.events.say('system', content);
     }
     return message;
+  }
+
+  addTurnNote(content: string, options?: {emit?: boolean}): AgentMessage {
+    const message = this.addSystemNote(content, options);
+    this.turnNotes.push(message);
+    return message;
+  }
+
+  clearTurnNotes(): void {
+    this.removeMessages(this.turnNotes);
+    this.turnNotes.length = 0;
   }
 
   setWorkspace(cwd: string) {
@@ -76,13 +95,14 @@ export class ConversationStore {
   removeMessages(messages: readonly AgentMessage[]) {
     const targets = new Set(messages);
     for (let index = this.messages.length - 1; index >= 0; index -= 1) {
-      if (targets.has(this.messages[index])) {
+      const message = this.messages[index];
+      if (message && targets.has(message)) {
         this.messages.splice(index, 1);
       }
     }
   }
 
-  finishTool(id: string, content: string, options?: FinishToolOptions) {
+  recordToolResult(id: string, content: string, options?: FinishToolOptions) {
     this.messages.push({
       role: 'tool',
       content: [
@@ -96,6 +116,10 @@ export class ConversationStore {
         }
       ]
     });
+  }
+
+  finishTool(id: string, content: string, options?: FinishToolOptions) {
+    this.recordToolResult(id, content, options);
     this.events.finishTool(id, content, options);
   }
 
@@ -143,7 +167,7 @@ export class ConversationStore {
   extractLastAssistantText(): string {
     for (let index = this.messages.length - 1; index >= 0; index -= 1) {
       const message = this.messages[index];
-      if (message.role === 'assistant') {
+      if (message?.role === 'assistant') {
         return messageText(message.content) ?? '';
       }
     }

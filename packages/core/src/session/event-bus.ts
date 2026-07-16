@@ -1,22 +1,43 @@
 import {getContextLimit} from '@code-agent-lite/platform';
 import {inferToolDisplay} from '@code-agent-lite/shared';
-import type {
-  AgentEvent,
+import {
   AgentStatus,
-  ChatRole,
-  TokenUsage,
-  ToolCallItem
+  createTokenUsage,
+  type AgentEvent,
+  type ChatRole,
+  type TokenUsage,
+  type ToolCallItem
 } from '../session-types.js';
-import {createTokenUsage} from '../session-types.js';
 import type {FinishToolOptions} from './finish-tool-options.js';
 
 export class SessionEventBus {
   readonly tokenUsage: TokenUsage = createTokenUsage();
+  private assistantEvents?: AgentEvent[];
 
   constructor(private readonly onEvent: (event: AgentEvent) => void) {}
 
   emit(event: AgentEvent) {
-    this.onEvent(event);
+    this.dispatch(event);
+  }
+
+  beginAssistantCapture(): void {
+    if (this.assistantEvents) {
+      throw new Error('Assistant event capture 已经开始');
+    }
+
+    this.assistantEvents = [];
+  }
+
+  endAssistantCapture(): AgentEvent[] {
+    const events = this.assistantEvents ?? [];
+    this.assistantEvents = undefined;
+    return events;
+  }
+
+  publish(events: readonly AgentEvent[]): void {
+    for (const event of events) {
+      this.onEvent(event);
+    }
   }
 
   recordTokenUsage(usage: TokenUsage) {
@@ -33,7 +54,7 @@ export class SessionEventBus {
 
     this.tokenUsage.contextLimit = contextLimit;
 
-    this.onEvent({
+    this.dispatch({
       type: 'token_usage',
       usage: {
         prompt: this.tokenUsage.prompt,
@@ -46,40 +67,40 @@ export class SessionEventBus {
   }
 
   status(status: AgentStatus, message?: string) {
-    this.onEvent({type: 'status', status, message});
+    this.dispatch({type: 'status', status, message});
   }
 
   say(role: ChatRole, content: string) {
-    this.onEvent({type: 'message', role, content});
+    this.dispatch({type: 'message', role, content});
   }
 
   startAssistantStream() {
-    this.onEvent({type: 'message_start', role: 'assistant'});
+    this.dispatch({type: 'message_start', role: 'assistant'});
   }
 
   appendAssistantDelta(delta: string) {
-    this.onEvent({type: 'message_delta', delta});
+    this.dispatch({type: 'message_delta', delta});
   }
 
   startThinkingStream() {
-    this.onEvent({type: 'thinking_start'});
+    this.dispatch({type: 'thinking_start'});
   }
 
   appendThinkingDelta(delta: string) {
-    this.onEvent({type: 'thinking_delta', delta});
+    this.dispatch({type: 'thinking_delta', delta});
   }
 
   endThinkingStream() {
-    this.onEvent({type: 'thinking_end'});
+    this.dispatch({type: 'thinking_end'});
   }
 
   commitAssistantStream() {
-    this.onEvent({type: 'message_end'});
+    this.dispatch({type: 'message_end'});
   }
 
   startTool(call: ToolCallItem) {
-    this.status('running_tool', call.name);
-    this.onEvent({type: 'tool_start', call});
+    this.status(AgentStatus.RunningTool, call.name);
+    this.dispatch({type: 'tool_start', call});
   }
 
   finishTool(id: string, content: string, options?: FinishToolOptions) {
@@ -89,7 +110,7 @@ export class SessionEventBus {
     const error = options?.error;
 
     if (error) {
-      this.onEvent({
+      this.dispatch({
         type: 'tool_end',
         id,
         error,
@@ -98,10 +119,25 @@ export class SessionEventBus {
       return;
     }
 
-    this.onEvent({type: 'tool_end', id, output: content, display});
+    this.dispatch({type: 'tool_end', id, output: content, display});
   }
 
   setWorkspace(cwd: string) {
-    this.onEvent({type: 'workspace', cwd});
+    this.dispatch({type: 'workspace', cwd});
+  }
+
+  private dispatch(event: AgentEvent): void {
+    if (
+      this.assistantEvents &&
+      (event.type === 'message_start' ||
+        event.type === 'message_delta' ||
+        event.type === 'message_end' ||
+        (event.type === 'message' && event.role === 'assistant'))
+    ) {
+      this.assistantEvents.push(event);
+      return;
+    }
+
+    this.onEvent(event);
   }
 }

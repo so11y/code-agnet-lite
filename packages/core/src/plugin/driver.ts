@@ -45,7 +45,8 @@ export class PluginDriver {
       }
 
       const callArgs = strategy === HookStrategy.Reduce ? [reduced, ...args.slice(1)] : args;
-      const result = await (fn as (...callArgs: unknown[]) => unknown | Promise<unknown>).apply(plugin, callArgs);
+      const hookHandler = fn as (...callArgs: unknown[]) => unknown | Promise<unknown>;
+      const result = await hookHandler.apply(plugin, callArgs);
 
       if (!acceptsHookResult(hook, result)) {
         continue;
@@ -78,7 +79,7 @@ export class PluginDriver {
     }
   }
 
-  async run(input: string, cwd: string, session: AgentSession): Promise<void> {
+  async run(input: string, cwd: string, session: AgentSession): Promise<PluginTurnContext> {
     const ctx = createPluginTurnContext(session, input, cwd);
 
     await this.runHook(PluginHook.BuildStart, HookStrategy.Void, ctx);
@@ -102,6 +103,8 @@ export class PluginDriver {
     } finally {
       await this.runHook(PluginHook.CloseTurn, HookStrategy.Void, ctx);
     }
+
+    return ctx;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   type PluginTurnContext
 } from '../../src/plugin/types.js';
 import {AgentSession} from '../../src/session.js';
+import {AgentRunReason} from '../../src/react-agent.js';
 
 function createCtx(input = 'hello', cwd = '/tmp'): PluginTurnContext {
   const events: unknown[] = [];
@@ -44,7 +45,7 @@ describe('PluginDriver', () => {
         prepareAgent(ctx) {
           order.push('prepareAgent');
           ctx.agent = {
-            run: async () => ({steps: 1, reason: 'final_answer'})
+            run: async () => ({steps: 1, reason: AgentRunReason.FinalAnswer})
           };
         }
       },

@@ -76,12 +76,18 @@ describe('DagWorker parent context', () => {
       dependsOn: []
     });
 
-    const output = await new DagWorker(node, new Blackboard(), parent, 3).run();
+    const output = await new DagWorker(
+      node,
+      new Blackboard(),
+      parent,
+      3,
+      '父任务上下文'
+    ).run();
 
     expect(output.summary).toBe('worker answer');
     expect(seenSignals).toEqual([controller.signal, controller.signal]);
     expect(
-      seenMessages[0].some(
+      (seenMessages.at(0) ?? []).some(
         (message) => message.role === 'system' && String(message.content).includes('[Skill: minimal-code]')
       )
     ).toBe(true);

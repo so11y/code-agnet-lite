@@ -1,9 +1,9 @@
 import {existsSync} from 'node:fs';
-import path from "node:path";
+import path from 'node:path';
 import {loadEnvFile} from 'node:process';
 
 export function loadDotEnv(cwd: string): void {
-  const envPath = path.join(cwd, ".env");
+  const envPath = path.join(cwd, '.env');
 
   if (!existsSync(envPath)) {
     return;
@@ -17,7 +17,7 @@ export function getRequiredOpenAiApiKey(): string {
 
   if (!apiKey) {
     throw new Error(
-      "Missing OPENAI_API_KEY. Create a .env file in the project root, then add OPENAI_API_KEY=your-key."
+      'Missing OPENAI_API_KEY. Create a .env file in the project root, then add OPENAI_API_KEY=your-key.'
     );
   }
 
@@ -34,7 +34,7 @@ export function getOpenAiModel(): string {
 
   if (!model) {
     throw new Error(
-      "Missing OPENAI_MODEL. Add OPENAI_MODEL=your-model to the project root .env file."
+      'Missing OPENAI_MODEL. Add OPENAI_MODEL=your-model to the project root .env file.'
     );
   }
 
@@ -43,14 +43,14 @@ export function getOpenAiModel(): string {
 
 export function isThinkingEnabled(): boolean {
   const value = process.env.ENABLE_THINKING?.trim().toLowerCase();
-  return value === "true" || value === "1";
+  return value === 'true' || value === '1';
 }
 
-export type AgentProviderKind = "openai" | "cursor";
+export type AgentProviderKind = 'openai' | 'cursor';
 
 export function getAgentProviderKind(): AgentProviderKind {
   const value = process.env.AGENT_PROVIDER?.trim().toLowerCase();
-  return value === "cursor" ? "cursor" : "openai";
+  return value === 'cursor' ? 'cursor' : 'openai';
 }
 
 export function getCursorApiKey(): string {
@@ -59,7 +59,7 @@ export function getCursorApiKey(): string {
     return cursorKey;
   }
 
-  return process.env.OPENAI_API_KEY?.trim() ?? "";
+  return process.env.OPENAI_API_KEY?.trim() ?? '';
 }
 
 export function getCursorModel(): string {
@@ -78,34 +78,35 @@ export type CursorModelSelection = {
 
 function parseCursorModelFast(): boolean | undefined {
   const value = process.env.CURSOR_MODEL_FAST?.trim().toLowerCase();
-  if (value === undefined || value === "") {
+  if (value === undefined || value === '') {
     return;
   }
 
-  return value !== "false" && value !== "0";
+  return value !== 'false' && value !== '0';
 }
 
 export function getCursorModelSelection(): CursorModelSelection {
-  let modelId = process.env.CURSOR_MODEL?.trim() || "composer-2.5";
+  let modelId = process.env.CURSOR_MODEL?.trim() || 'composer-2.5';
   let fast = parseCursorModelFast();
 
-  if (modelId.endsWith("-fast")) {
-    modelId = modelId.slice(0, -"-fast".length);
+  if (modelId.endsWith('-fast')) {
+    modelId = modelId.slice(0, -'-fast'.length);
     fast ??= true;
   }
 
-  if (fast === undefined || !modelId.startsWith("composer-")) {
-    return { id: modelId };
+  if (fast === undefined || !modelId.startsWith('composer-')) {
+    return {id: modelId};
   }
 
   return {
     id: modelId,
-    params: [{ id: "fast", value: fast ? "true" : "false" }]
+    params: [{id: 'fast', value: fast ? 'true' : 'false'}]
   };
 }
 
+const DEFAULT_COMPOSER_CONTEXT_LIMIT = 200_000;
 const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  "composer-2.5": 200_000
+  'composer-2.5': DEFAULT_COMPOSER_CONTEXT_LIMIT
 };
 
 function parseContextLimitOverride(): number | undefined {
@@ -127,11 +128,11 @@ function parseContextLimitOverride(): number | undefined {
 }
 
 export function getActiveModelName(): string {
-  if (getAgentProviderKind() === "cursor") {
+  if (getAgentProviderKind() === 'cursor') {
     return getCursorModel();
   }
 
-  return process.env.OPENAI_MODEL?.trim() ?? "";
+  return process.env.OPENAI_MODEL?.trim() ?? '';
 }
 
 export function getContextLimit(model = getActiveModelName()): number {
@@ -143,12 +144,13 @@ export function getContextLimit(model = getActiveModelName()): number {
 
   const normalized = model.trim().toLowerCase();
 
-  if (MODEL_CONTEXT_LIMITS[normalized]) {
-    return MODEL_CONTEXT_LIMITS[normalized];
+  const knownLimit = MODEL_CONTEXT_LIMITS[normalized];
+  if (knownLimit) {
+    return knownLimit;
   }
 
-  if (normalized.startsWith("composer-")) {
-    return MODEL_CONTEXT_LIMITS["composer-2.5"];
+  if (normalized.startsWith('composer-')) {
+    return DEFAULT_COMPOSER_CONTEXT_LIMIT;
   }
 
   return 128_000;

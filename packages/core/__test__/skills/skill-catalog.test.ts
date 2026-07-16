@@ -58,7 +58,7 @@ describe('Skills.mountCatalog', () => {
         message.role === 'system' && String(message.content).startsWith('catalog:')
     );
     expect(catalogMessages).toHaveLength(1);
-    expect(String(catalogMessages[0].content)).toContain('skill-b');
+    expect(String(catalogMessages[0]!.content)).toContain('skill-b');
   });
 
   it('marks empty cwd synced without leaving catalog message', async () => {

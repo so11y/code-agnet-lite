@@ -6,11 +6,12 @@ vi.mock('../../src/turn/post-turn.js', () => ({runPostTurnVerify}));
 
 import {verifyPlugin} from '../../src/plugin/builtins.js';
 import type {CodeAgent} from '../../src/code-agent.js';
+import {AgentRunReason} from '../../src/react-agent.js';
 import {AgentSession} from '../../src/session.js';
 import type {PluginTurnContext} from '../../src/plugin/types.js';
 
 const agent: CodeAgent = {
-  run: async () => ({steps: 1, reason: 'final_answer'})
+  run: async () => ({steps: 1, reason: AgentRunReason.FinalAnswer})
 };
 
 function context(succeeded: boolean): PluginTurnContext {

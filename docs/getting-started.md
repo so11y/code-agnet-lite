@@ -53,7 +53,7 @@ OPENAI_BASE_URL=https://api.example.com/v1
 OPENAI_MODEL=你的网关模型名
 ```
 
-**说明：** `AGENT_PROVIDER` 只影响**主 Agent 执行**（读改文件那层）。任务路由、ToT/DAG 规划、验证等仍调用 OpenAI 接口，因此 **cursor 模式下也需要配置 `OPENAI_API_KEY` 和 `OPENAI_MODEL`**（或指向兼容网关）。
+**说明：** `AGENT_PROVIDER` 决定主 Agent、DAG Worker 和 Merge Agent 的执行后端。任务路由、ToT/DAG 的结构化规划、复盘与验证门禁仍调用 OpenAI 接口，因此 **cursor 模式下也需要配置 `OPENAI_API_KEY` 和 `OPENAI_MODEL`**（或指向兼容网关）。
 
 全部变量见 [.env.example](../.env.example)。
 

@@ -1,8 +1,10 @@
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {simulateReadableStream} from 'ai';
 import {MockLanguageModelV4} from 'ai/test';
 import {z} from 'zod';
 import {OpenAiLlmProvider} from '../../src/provider/openai-provider.js';
+import {AgentSession} from '../../src/session.js';
+import type {AgentEvent} from '../../src/session-types.js';
 
 const usage = {
   inputTokens: {total: 12, noCache: 12, cacheRead: 0, cacheWrite: 0},
@@ -10,6 +12,34 @@ const usage = {
 };
 
 describe('OpenAiLlmProvider', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('uses the injected model id for context usage', async () => {
+    vi.stubEnv('CONTEXT_LIMIT', '');
+    vi.stubEnv('OPENAI_CONTEXT_LIMIT', '');
+    const events: AgentEvent[] = [];
+    const model = new MockLanguageModelV4({
+      modelId: 'composer-2.5',
+      doGenerate: {
+        content: [{type: 'text', text: 'ok'}],
+        finishReason: {unified: 'stop', raw: 'stop'},
+        usage,
+        warnings: []
+      }
+    });
+    const provider = new OpenAiLlmProvider(model);
+    const session = new AgentSession({
+      cwd: '/project',
+      plugins: [],
+      onEvent: (event) => events.push(event)
+    });
+
+    await provider.plainChat([{role: 'user', content: 'hello'}], {session});
+
+    const tokenEvent = events.find((event) => event.type === 'token_usage');
+    expect(tokenEvent?.type === 'token_usage' && tokenEvent.usage.contextLimit).toBe(200_000);
+  });
+
   it('uses AI SDK structured output validation', async () => {
     const model = new MockLanguageModelV4({
       doGenerate: {

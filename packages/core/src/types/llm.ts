@@ -18,6 +18,7 @@ export type LlmOptions = {
 export type LlmStreamOptions = LlmOptions & {
   onDelta: (delta: string) => void;
   onReasoningDelta?: (delta: string) => void;
+  allowTools?: boolean;
 };
 
 export type {ToolRegistry, TokenUsageSink};

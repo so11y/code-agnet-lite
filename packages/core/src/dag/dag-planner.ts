@@ -1,7 +1,9 @@
-import {DAG_PLAN_PROMPT, DAG_SUBGRAPH_REPLAN_PROMPT, formatTurnUserMessage} from '../prompt.js';
+import {DAG_PLAN_PROMPT, DAG_SUBGRAPH_REPLAN_PROMPT} from '../prompt.js';
 import type {AgentSession} from '../session.js';
+import {AgentStatus} from '../session-types.js';
 import {callStructuredLlmOrThrow} from '../structured-llm-caller.js';
 import type {TurnOperations} from '../types/operations.js';
+import {formatTurnContext} from '../turn-context.js';
 import {TaskGraph} from './task-graph.js';
 import {
   dagPlanSchema,
@@ -20,8 +22,8 @@ type SubgraphReplanContext = {
   originalGraphSummary?: string;
 };
 
-export async function llmPlanDag(input: string, session: AgentSession): Promise<TaskGraph> {
-  session.events.status('thinking', 'DAG 规划');
+export async function llmPlanDag(session: AgentSession): Promise<TaskGraph> {
+  session.events.status(AgentStatus.Thinking, 'DAG 规划');
 
   const plan = await callStructuredLlmOrThrow({
     messages: [
@@ -31,7 +33,7 @@ export async function llmPlanDag(input: string, session: AgentSession): Promise<
       },
       {
         role: 'user',
-        content: formatTurnUserMessage(session.cwd, input)
+        content: formatTurnContext(session)
       }
     ],
     schema: dagPlanSchema,
@@ -42,11 +44,10 @@ export async function llmPlanDag(input: string, session: AgentSession): Promise<
 }
 
 export async function llmReplanSubgraph(
-  input: string,
   session: AgentSession,
   context: SubgraphReplanContext
 ): Promise<DagSubgraphPlan> {
-  session.events.status('thinking', 'DAG 链级重规划');
+  session.events.status(AgentStatus.Thinking, 'DAG 链级重规划');
 
   const plan = await callStructuredLlmOrThrow({
     messages: [
@@ -57,7 +58,7 @@ export async function llmReplanSubgraph(
       {
         role: 'user',
         content: [
-          formatTurnUserMessage(session.cwd, input),
+          formatTurnContext(session),
           `[原 DAG 摘要]\n${context.originalGraphSummary ?? '无'}`,
           `[失败节点]\n${JSON.stringify(context.failedNodes, null, 2)}`,
           `[受影响节点 ID]\n${context.replanSet.join('\n')}`,

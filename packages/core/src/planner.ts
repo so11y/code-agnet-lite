@@ -1,10 +1,10 @@
-import {clamp} from 'lodash-es';
 import {formatSessionTranscript} from './openai-message.js';
 import {formatError, formatList, joinSections} from '@code-agent-lite/shared';
 import {type Plan, type PlanReview, planSchema, reviewSchema} from './planner-schemas.js';
 import {buildPlanPrompt, REVIEW_TOT_PROMPT} from './prompt.js';
-import type {AgentRunResult} from './react-agent.js';
+import {AgentRunReason, type AgentRunResult} from './react-agent.js';
 import type {AgentSession} from './session.js';
+import {AgentStatus} from './session-types.js';
 import {callStructuredLlmWithHandler} from './structured-llm-caller.js';
 
 function formatPlan(title: string, plan: Plan): string {
@@ -56,14 +56,17 @@ async function requestPlan(
         content: joinSections(
           extraContext,
           formatStateContext(session),
-          formatSessionTranscript(session.conversation.messages)
+          formatSessionTranscript(session.buildLlmMessages())
         )
       }
     ],
     schema: planSchema,
     llmOptions: session.llmOptions(),
     onParseError(text) {
-      session.conversation.addSystemNote(`${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`);
+      session.conversation.addTurnNote(
+        `${title}\n\n解析失败；以下原始输出仅供 ReAct 验证参考。\n\n${text}`,
+        {emit: false}
+      );
       return undefined;
     }
   });
@@ -73,19 +76,17 @@ async function requestPlan(
   }
 
   session.ledger.applyHypotheses(plan.hypotheses);
-  session.conversation.addSystemNote(formatPlan(title, plan));
+  session.conversation.addTurnNote(formatPlan(title, plan), {emit: false});
   return plan;
 }
 
 export async function llmPlan(session: AgentSession) {
-  session.events.status('thinking', '规划');
+  session.events.status(AgentStatus.Thinking, '规划');
   await requestPlan(session, 'root', '当前假设：');
 }
 
 export async function llmReplan(session: AgentSession) {
-  session.ledger.rejectHypotheses(session.ledger.state.hypotheses);
-  session.ledger.applyHypotheses([]);
-  session.ledger.state.confidence = clamp(session.ledger.state.confidence - 0.15, 0, 1);
+  session.ledger.beginReplan();
 
   await requestPlan(
     session,
@@ -105,7 +106,7 @@ function formatRunOutcome(result: AgentRunResult, error?: unknown) {
 }
 
 function didRunFail(result: AgentRunResult, error?: unknown) {
-  return Boolean(error) || result.reason !== 'final_answer';
+  return Boolean(error) || result.reason !== AgentRunReason.FinalAnswer;
 }
 
 export async function updateStateFromRun(
@@ -114,7 +115,7 @@ export async function updateStateFromRun(
   error?: unknown,
   progressBefore = session.ledger.snapshotProgress()
 ) {
-  session.events.status('thinking', '复盘');
+  session.events.status(AgentStatus.Thinking, '复盘');
   const runFailed = didRunFail(result, error);
   const review = await callStructuredLlmWithHandler({
     messages: [
@@ -126,14 +127,16 @@ export async function updateStateFromRun(
           '运行结果：',
           formatRunOutcome(result, error),
           '会话记录：',
-          formatSessionTranscript(session.conversation.messages)
+          formatSessionTranscript(session.buildLlmMessages())
         )
       }
     ],
     schema: reviewSchema,
     llmOptions: session.llmOptions(),
     onParseError(text) {
-      session.conversation.addSystemNote(`运行复盘解析失败。原始输出：\n\n${text}`);
+      session.conversation.addTurnNote(`运行复盘解析失败。原始输出：\n\n${text}`, {
+        emit: false
+      });
       return undefined;
     }
   });
@@ -143,18 +146,8 @@ export async function updateStateFromRun(
     return undefined;
   }
 
-  session.conversation.addSystemNote(formatReview(review, runFailed));
-  session.ledger.addFacts(review.facts);
-  session.ledger.state.confidence = review.confidence;
-
-  if (runFailed || !review.directionCorrect) {
-    session.ledger.rejectHypotheses(review.rejected);
-
-    if (review.hypotheses.length) {
-      session.ledger.applyHypotheses(review.hypotheses);
-    }
-  }
-
+  session.conversation.addTurnNote(formatReview(review, runFailed), {emit: false});
+  session.ledger.applyReview(review, runFailed);
   session.ledger.noteProgress(progressBefore);
   return review;
 }

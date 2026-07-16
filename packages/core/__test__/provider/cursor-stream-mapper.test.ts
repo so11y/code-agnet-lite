@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
+  CursorStreamEventResult,
   extractCursorText,
   formatCursorToolOutput,
   mapCursorStreamEvent,
@@ -13,6 +14,7 @@ function createSink() {
   const toolStarts: ToolCallItem[] = [];
   const toolEnds: Array<{id: string; output: string; options?: FinishToolOptions}> = [];
   const texts: string[] = [];
+  const thinking: string[] = [];
   const usages: TokenUsage[] = [];
 
   const sink: CursorStreamMapperSink = {
@@ -25,12 +27,15 @@ function createSink() {
     appendAssistantDelta(text) {
       texts.push(text);
     },
+    showThinking(text) {
+      thinking.push(text);
+    },
     recordTokenUsage(usage) {
       usages.push(usage);
     }
   };
 
-  return {sink, toolStarts, toolEnds, texts, usages};
+  return {sink, toolStarts, toolEnds, texts, thinking, usages};
 }
 
 describe('extractCursorText', () => {
@@ -71,7 +76,7 @@ describe('mapCursorStreamEvent', () => {
       openTools
     );
 
-    expect(result).toBe('tool');
+    expect(result).toBe(CursorStreamEventResult.Tool);
     expect(toolStarts).toEqual([{id: 'call-1', name: 'read_file', input: {path: 'a.ts'}}]);
     expect(toolEnds).toEqual([]);
     expect(openTools.has('call-1')).toBe(true);
@@ -106,6 +111,26 @@ describe('mapCursorStreamEvent', () => {
     expect(openTools.has('call-1')).toBe(false);
   });
 
+  it('synthesizes a start when the SDK only sends a completed tool event', () => {
+    const {sink, toolStarts, toolEnds} = createSink();
+
+    mapCursorStreamEvent(
+      {
+        type: 'tool_call',
+        call_id: 'call-1',
+        name: 'write_file',
+        status: 'completed',
+        args: {path: 'a.ts'},
+        result: 'ok'
+      },
+      sink,
+      new Map<string, ToolCallItem>()
+    );
+
+    expect(toolStarts).toEqual([{id: 'call-1', name: 'write_file', input: {path: 'a.ts'}}]);
+    expect(toolEnds[0]?.options).toEqual({toolName: 'write_file', toolInput: {path: 'a.ts'}});
+  });
+
   it('records usage events', () => {
     const {sink, usages} = createSink();
 
@@ -124,7 +149,7 @@ describe('mapCursorStreamEvent', () => {
       new Map<string, ToolCallItem>()
     );
 
-    expect(result).toBe('usage');
+    expect(result).toBe(CursorStreamEventResult.Usage);
     expect(usages).toEqual([
       {
         prompt: 100,
@@ -144,8 +169,20 @@ describe('mapCursorStreamEvent', () => {
       new Map<string, ToolCallItem>()
     );
 
-    expect(result).toBe('text');
+    expect(result).toBe(CursorStreamEventResult.Text);
     expect(texts).toEqual(['hi']);
+  });
+
+  it('keeps thinking separate from assistant output', () => {
+    const {sink, texts, thinking} = createSink();
+    const event = {type: 'thinking', text: 'inspect first'};
+
+    expect(mapCursorStreamEvent(event, sink, new Map())).toBe(
+      CursorStreamEventResult.Thinking
+    );
+    expect(shouldStartAssistantStream(event)).toBe(false);
+    expect(thinking).toEqual(['inspect first']);
+    expect(texts).toEqual([]);
   });
 });
 

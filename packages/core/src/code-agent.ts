@@ -2,7 +2,6 @@ import type {AgentTool} from '@code-agent-lite/tools';
 import {openAiLlm} from './provider/openai-provider.js';
 import {ReActAgent, type AgentRunResult} from './react-agent.js';
 import type {AgentMessage, AssistantMessage, LlmStreamOptions} from './session-types.js';
-import {CursorCodeAgent} from './provider/cursor-code-agent.js';
 
 export class DefaultCodeAgent extends ReActAgent {
   protected async streamLlm(
@@ -23,5 +22,5 @@ export type CodeAgent = {
 };
 
 export function supportsToolLoop(agent: CodeAgent): agent is ReActAgent {
-  return agent instanceof ReActAgent && !(agent instanceof CursorCodeAgent);
+  return agent instanceof ReActAgent;
 }

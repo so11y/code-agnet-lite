@@ -31,7 +31,7 @@ vi.mock('../../src/provider/openai-provider.js', async (importOriginal) => {
   };
 });
 
-import type {AgentEvent} from '../../src/types/events.js';
+import {AgentStatus, type AgentEvent} from '../../src/types/events.js';
 import {defaultPlugins, PluginDriver} from '../../src/plugin/index.js';
 import {runAgentTurn} from '../../src/loop.js';
 import {AgentSession} from '../../src/session.js';
@@ -61,7 +61,7 @@ describe('debug: core turn flow (defaultPlugins)', {timeout: 0}, () => {
     );
 
     expect(session.conversation.extractLastAssistantText()).toContain('debug: defaultPlugins agent 回复');
-    expect(events.some((e) => e.type === 'status' && e.status === 'done')).toBe(true);
+    expect(events.some((e) => e.type === 'status' && e.status === AgentStatus.Done)).toBe(true);
   });
 
   it('runAgentTurn — 调试 loop 入口（等同 CLI 调 core，无 Ink）', async () => {
@@ -72,6 +72,6 @@ describe('debug: core turn flow (defaultPlugins)', {timeout: 0}, () => {
       '并行探索 packages/core/src/turn 和 packages/core/src/dag，各自理清入口和调用链，最后汇总它们怎么串起来。'
     );
 
-    expect(events.some((e) => e.type === 'status' && e.status === 'done')).toBe(true);
+    expect(events.some((e) => e.type === 'status' && e.status === AgentStatus.Done)).toBe(true);
   });
 });

@@ -2,8 +2,9 @@ import {isEmpty} from 'lodash-es';
 import type {PlanReview} from '../planner-schemas.js';
 import {llmPlan, llmReplan, updateStateFromRun} from '../planner.js';
 import type {CodeAgent} from '../code-agent.js';
-import type {AgentRunResult} from '../react-agent.js';
+import {AgentRunReason, type AgentRunResult} from '../react-agent.js';
 import type {AgentSession} from '../session.js';
+import type {AgentEvent} from '../session-types.js';
 
 export const MAX_TOT_RETRIES = 3;
 export const TOT_CONFIDENCE_TARGET = 0.9;
@@ -17,7 +18,7 @@ export type TotTurnResult = {
 
 export function shouldContinueTot(result: TotTurnResult): boolean {
   return !(
-    result.run.reason === 'final_answer' &&
+    result.run.reason === AgentRunReason.FinalAnswer &&
     result.directionCorrect &&
     result.confidence >= TOT_CONFIDENCE_TARGET
   );
@@ -39,7 +40,7 @@ export async function runTotTurn(session: AgentSession, agent: CodeAgent): Promi
   } catch (error) {
     await updateStateFromRun(
       session,
-      {steps: 0, reason: 'max_steps'},
+      {steps: 0, reason: AgentRunReason.MaxSteps},
       error,
       progressBefore
     );
@@ -66,6 +67,7 @@ export async function runTotTurnWithRetries(
   maxRetries = MAX_TOT_RETRIES
 ): Promise<TotTurnResult> {
   let last: TotTurnResult | undefined;
+  let lastAssistantEvents: AgentEvent[] = [];
 
   for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
     session.throwIfAborted();
@@ -73,15 +75,21 @@ export async function runTotTurnWithRetries(
     if (attempt > 1) {
       if (session.ledger.state.noProgress >= 2) {
         await llmReplan(session);
-        session.ledger.state.noProgress = 0;
+        session.ledger.resetNoProgress();
       } else if (isEmpty(session.ledger.state.hypotheses)) {
         await llmPlan(session);
       }
     }
 
-    last = await runTotTurn(session, agent);
+    session.events.beginAssistantCapture();
+    try {
+      last = await runTotTurn(session, agent);
+    } finally {
+      lastAssistantEvents = session.events.endAssistantCapture();
+    }
 
     if (!shouldContinueTot(last)) {
+      session.events.publish(lastAssistantEvents);
       return last;
     }
   }
@@ -91,5 +99,6 @@ export async function runTotTurnWithRetries(
     `ToT 已达最大轮数（${maxRetries}），方向或置信度仍未达标，按当前结论继续。`
   );
 
+  session.events.publish(lastAssistantEvents);
   return last!;
 }

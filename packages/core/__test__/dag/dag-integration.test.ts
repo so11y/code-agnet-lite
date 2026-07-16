@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   plan: vi.fn(),
   replan: vi.fn(),
   workerRun: vi.fn(),
-  plainChat: vi.fn()
+  mergeRun: vi.fn()
 }));
 
 vi.mock('../../src/dag/dag-planner.js', () => ({
@@ -28,7 +28,7 @@ vi.mock('../../src/dag/worker.js', () => ({
 
 vi.mock('../../src/provider/openai-provider.js', () => ({
   openAiLlm: {
-    plainChat: mocks.plainChat
+    streamWithTools: mocks.mergeRun
   }
 }));
 
@@ -36,6 +36,7 @@ import {runDagTurn} from '../../src/dag/orchestrator.js';
 import {TaskGraph} from '../../src/dag/task-graph.js';
 import {Blackboard, TaskOutput, type TaskNode} from '../../src/dag/dag-model.js';
 import {AgentSession} from '../../src/session.js';
+import {AgentStatus, VerificationOutcome} from '../../src/session-types.js';
 
 const tasks = [
   {id: 'worker', kind: 'explore' as const, goal: 'work', dependsOn: []},
@@ -47,10 +48,10 @@ describe('DAG parent session integration', () => {
     mocks.plan.mockReset();
     mocks.replan.mockReset();
     mocks.workerRun.mockReset();
-    mocks.plainChat.mockReset();
+    mocks.mergeRun.mockReset();
     mocks.plan.mockImplementation(async () => TaskGraph.fromPlan(tasks));
     mocks.replan.mockResolvedValue({tasks});
-    mocks.plainChat.mockResolvedValue('merged answer');
+    mocks.mergeRun.mockResolvedValue({role: 'assistant', content: 'merged answer'});
   });
 
   it('commits the final answer and all worker memory to the parent session', async () => {
@@ -71,7 +72,10 @@ describe('DAG parent session integration', () => {
     const session = new AgentSession({cwd: '/project', onEvent: (event) => events.push(event)});
     session.beginTurn('do work');
 
-    await expect(runDagTurn(session, 'do work')).resolves.toBe(true);
+    await expect(runDagTurn(session, 'do work')).resolves.toEqual({
+      succeeded: true,
+      verification: VerificationOutcome.NotRequired
+    });
 
     expect(session.conversation.extractLastAssistantText()).toBe('merged answer');
     expect(session.ledger.state).toMatchObject({
@@ -89,7 +93,9 @@ describe('DAG parent session integration', () => {
         (message) => message.role === 'assistant' && message.content === 'merged answer'
       )
     ).toBe(true);
-    expect(events).toContainEqual(expect.objectContaining({type: 'status', status: 'done'}));
+    expect(events).toContainEqual(
+      expect.objectContaining({type: 'status', status: AgentStatus.Done})
+    );
   });
 
   it('keeps partial operations when the DAG exhausts recovery', async () => {
@@ -120,7 +126,7 @@ describe('DAG parent session integration', () => {
     });
     session.beginTurn('do work');
 
-    await expect(runDagTurn(session, 'do work')).resolves.toBe(false);
+    await expect(runDagTurn(session, 'do work')).resolves.toEqual({succeeded: false});
 
     expect(session.ledger.snapshotOperations().writtenFiles).toEqual(['partial.ts']);
     expect(assistantMessages).toEqual([]);

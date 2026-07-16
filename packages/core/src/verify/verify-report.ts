@@ -92,7 +92,7 @@ export function buildFinalFailureReport(options: {
     operations.deletedFiles.length > 0
       ? `### 本轮已删除文件\n${operations.deletedFiles.map((file) => `- ${file}`).join('\n')}`
       : '',
-    operations.writtenFiles.length === 0 && operations.deletedFiles.length === 0
+    !operations.hasFileChanges
       ? '### 本轮文件变更\n（未检测到 write_file / delete_file 调用）'
       : '',
     '',

@@ -4,9 +4,9 @@ import {Box, Text} from 'ink';
 import {
   createDefaultSkillRegistry,
   createTokenUsage,
+  AgentStatus,
   isAgentBusy,
   type AgentEvent,
-  type AgentStatus,
   type ChatItem,
   type SkillMeta,
   type TokenUsage
@@ -31,7 +31,7 @@ export function App({cwd}: Props) {
   const [workspace, setWorkspace] = useState(() => path.resolve(cwd));
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [plan, setPlan] = useState<PlanTodoState | undefined>();
-  const [status, setStatus] = useState<AgentStatus>('idle');
+  const [status, setStatus] = useState(AgentStatus.Idle);
   const [statusMessage, setStatusMessage] = useState<string>();
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>(() => createTokenUsage());
   const [inputValue, setInputValue] = useState('');
@@ -52,9 +52,12 @@ export function App({cwd}: Props) {
     setItems((current) => [...current, {type: 'message', item}]);
   }, []);
 
-  const updateStreamingByRole = useCallback((role: ChatItem['role'], update: (item: ChatItem) => ChatItem) => {
-    setItems((current) => updateStreamingMessage(current, role, update));
-  }, []);
+  const updateStreamingByRole = useCallback(
+    (role: ChatItem['role'], update: (item: ChatItem) => ChatItem) => {
+      setItems((current) => updateStreamingMessage(current, role, update));
+    },
+    []
+  );
 
   const updateStatus = useCallback((next: AgentStatus, message?: string) => {
     setStatus(next);
@@ -141,7 +144,7 @@ export function App({cwd}: Props) {
       setItems([]);
       setPlan(undefined);
       setTokenUsage(createTokenUsage());
-      updateStatus('idle', cwdForSession);
+      updateStatus(AgentStatus.Idle, cwdForSession);
       appendMessage({role: 'system', content: '已开始新对话'});
     },
     [appendMessage, clearSession, updateStatus]
@@ -149,14 +152,14 @@ export function App({cwd}: Props) {
 
   const runInWorkspace = useCallback(
     (input: string, cwdForRun: string) => {
-      updateStatus('thinking', cwdForRun);
+      updateStatus(AgentStatus.Thinking, cwdForRun);
       void runTurn(input, cwdForRun).catch((error) => {
         if (isAbortError(error)) {
           return;
         }
 
         const message = formatError(error);
-        updateStatus('error', message);
+        updateStatus(AgentStatus.Error, message);
         appendMessage({role: 'assistant', content: message});
       });
     },

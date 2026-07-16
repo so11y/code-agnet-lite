@@ -134,7 +134,8 @@ export class TaskGraph {
     }
 
     const cycle = alg.findCycles(graph)[0];
-    return cycle?.length ? [...cycle, cycle[0]] : undefined;
+    const first = cycle?.[0];
+    return first ? [...cycle, first] : undefined;
   }
 
   private hasPath(from: string, to: string): boolean {
@@ -219,6 +220,9 @@ export class TaskGraph {
     }
 
     const merge = mergeNodes[0];
+    if (!merge) {
+      throw new Error(`${label}缺少 merge 节点`);
+    }
     if (this.edges.some((edge) => edge.from === merge.id)) {
       throw new Error(`${label}的 merge 节点必须是终点`);
     }

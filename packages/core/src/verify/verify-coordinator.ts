@@ -2,11 +2,16 @@ import {llmReplan} from '../planner.js';
 import {VERIFY_GATE_PROMPT} from '../prompt.js';
 import type {CodeAgent} from '../code-agent.js';
 import type {AgentSession} from '../session.js';
-import type {ReasoningMode, TurnVerification} from '../session-types.js';
+import {
+  AgentStatus,
+  VerificationOutcome,
+  type ReasoningMode,
+  type TurnVerification
+} from '../session-types.js';
 import {executeReasoningMode} from '../turn/execute-mode.js';
 import {callStructuredLlm} from '../structured-llm-caller.js';
 import {TaskOutput, type TaskNode} from '../dag/dag-model.js';
-import {createEmptyTurnOperations, verifyGateSchema} from '../types/operations.js';
+import {TurnOperations, verifyGateSchema} from '../types/operations.js';
 import {discoverVerifyCommands} from './verify-discovery.js';
 import {
   buildFinalFailureReport,
@@ -17,6 +22,7 @@ import {
 import {runAllVerify} from './verify-runner.js';
 import {
   decideFixLoopAction,
+  FixLoopAction,
   MAX_FIX_ROUNDS,
   MAX_REPLAN_ATTEMPTS,
   type VerifyResult
@@ -48,7 +54,8 @@ export class VerifyCoordinator {
     if (commands.length === 0) {
       return new TaskOutput({
         summary: '未找到可运行的验证命令，已跳过自动验证。',
-        operations: createEmptyTurnOperations(),
+        verification: VerificationOutcome.Skipped,
+        operations: new TurnOperations(),
         facts: ['当前工作区没有 npm test / typecheck 等验证命令']
       });
     }
@@ -58,7 +65,8 @@ export class VerifyCoordinator {
     if (failures.length === 0) {
       return new TaskOutput({
         summary: `验证通过：${commands.join('、')}`,
-        operations: {writtenFiles: [], deletedFiles: [], executedCommands: commands},
+        verification: VerificationOutcome.Passed,
+        operations: new TurnOperations({executedCommands: commands}),
         facts: ['DAG verify 节点验证通过']
       });
     }
@@ -67,8 +75,23 @@ export class VerifyCoordinator {
   }
 
   static async judgeGate(session: AgentSession): Promise<TurnVerification> {
-    const record = session.ledger.collectTurnRecord(session.conversation.extractLastAssistantText());
-    session.events.status('thinking', '验证门禁');
+    const record = session.ledger.collectTurnRecord(
+      session.conversation.extractLastAssistantText()
+    );
+    const {operations} = record;
+
+    if (operations.hasFileChanges) {
+      return {...record, gate: fallbackVerifyGate(record)};
+    }
+
+    if (operations.isEmpty) {
+      return {
+        ...record,
+        gate: {shouldVerify: false, reason: '本轮没有写入、删除或执行命令'}
+      };
+    }
+
+    session.events.status(AgentStatus.Thinking, '验证门禁');
 
     const gate = await callStructuredLlm({
       messages: [
@@ -88,7 +111,7 @@ export class VerifyCoordinator {
     session: AgentSession,
     verification: TurnVerification,
     mode?: ReasoningMode
-  ): Promise<void> {
+  ): Promise<VerificationOutcome> {
     const commands = await this.discover();
 
     if (commands.length === 0) {
@@ -103,8 +126,8 @@ export class VerifyCoordinator {
           '已跳过自动验证，请手动确认改动是否正确。'
         ].join('\n')
       );
-      session.events.status('done', '完成（无可用验证命令）');
-      return;
+      session.events.status(AgentStatus.Done, '完成（无可用验证命令）');
+      return VerificationOutcome.Skipped;
     }
 
     let fixRound = 0;
@@ -112,12 +135,12 @@ export class VerifyCoordinator {
 
     while (true) {
       session.throwIfAborted();
-      session.events.status('thinking', '自动验证');
+      session.events.status(AgentStatus.Thinking, '自动验证');
       const failures = await this.runAll(commands);
 
       if (failures.length === 0) {
-        session.events.status('done', '验证通过');
-        return;
+        session.events.status(AgentStatus.Done, '验证通过');
+        return VerificationOutcome.Passed;
       }
 
       const action = decideFixLoopAction({
@@ -127,7 +150,7 @@ export class VerifyCoordinator {
         maxReplans: MAX_REPLAN_ATTEMPTS
       });
 
-      if (action === 'give-up') {
+      if (action === FixLoopAction.GiveUp) {
         const report = buildFinalFailureReport({
           failures,
           fixRounds: MAX_FIX_ROUNDS,
@@ -135,12 +158,12 @@ export class VerifyCoordinator {
           operations: session.ledger.snapshotOperations(),
           gate: verification.gate
         });
-        session.events.status('error', '验证未通过，已达最大尝试次数');
+        session.events.status(AgentStatus.Error, '验证未通过，已达最大尝试次数');
         session.events.say('system', report);
-        return;
+        return VerificationOutcome.Failed;
       }
 
-      if (action === 'replan') {
+      if (action === FixLoopAction.Replan) {
         replans += 1;
         fixRound = 0;
         await llmReplan(session);

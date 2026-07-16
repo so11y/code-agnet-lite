@@ -1,5 +1,6 @@
 import {Semaphore} from 'async-mutex';
 import type {AgentSession} from '../session.js';
+import {AgentStatus} from '../session-types.js';
 import {VerifyCoordinator} from '../verify/verify-coordinator.js';
 import {type Blackboard, type TaskNode, type TaskOutput} from './dag-model.js';
 import {runMergeNode} from './merge-node.js';
@@ -20,6 +21,7 @@ type DagRunContext = {
   session: AgentSession;
   blackboard: Blackboard;
   userInput: string;
+  turnContext: string;
   options?: Partial<DagSchedulerOptions>;
   tryRecoverFailures?: (failedNodes: TaskNode[]) => Promise<boolean>;
 };
@@ -37,7 +39,7 @@ export class DagScheduler {
   }
 
   async run(): Promise<void> {
-    this.context.session.events.status('thinking', 'DAG 执行');
+    this.context.session.events.status(AgentStatus.Thinking, 'DAG 执行');
     this.emitSnapshot();
 
     while (true) {
@@ -46,7 +48,13 @@ export class DagScheduler {
       const ready = this.graph.readyNodes();
 
       if (ready.length) {
-        await Promise.all(ready.map((node) => this.runNode(node)));
+        const exploreNodes = ready.filter((node) => node.kind === 'explore');
+        const serialNodes = ready.filter((node) => node.kind !== 'explore');
+
+        await Promise.all(exploreNodes.map((node) => this.runNode(node)));
+        for (const node of serialNodes) {
+          await this.runNode(node);
+        }
         continue;
       }
 
@@ -107,7 +115,8 @@ export class DagScheduler {
           node,
           this.context.blackboard,
           this.context.session,
-          this.options.workerMaxSteps
+          this.options.workerMaxSteps,
+          this.context.turnContext
         ).run();
       case 'verify':
         return new VerifyCoordinator(

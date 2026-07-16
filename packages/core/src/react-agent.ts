@@ -9,19 +9,27 @@ import {
 } from '@code-agent-lite/shared';
 import {buildWrapUpPrompt, WRAP_UP_THRESHOLD} from './prompt.js';
 import {AgentSession} from './session.js';
-import type {
-  AgentMessage,
-  AgentSessionOptions,
-  AssistantMessage,
-  LlmStreamOptions,
-  ToolCall,
-  ToolCallItem
+import {
+  AgentStatus,
+  type AgentMessage,
+  type AgentSessionOptions,
+  type AssistantMessage,
+  type LlmStreamOptions,
+  type ToolCall,
+  type ToolCallItem
 } from './session-types.js';
+
+export enum AgentRunReason {
+  FinalAnswer = 'final_answer',
+  MaxSteps = 'max_steps'
+}
 
 export type AgentRunResult = {
   steps: number;
-  reason: 'final_answer' | 'max_steps';
+  reason: AgentRunReason;
 };
+
+const MAX_STEPS_TOOL_ERROR = '已达到最大步数，未执行该工具调用。';
 
 function messageToolCalls(message: AssistantMessage): ToolCall[] {
   return typeof message.content === 'string'
@@ -51,10 +59,10 @@ export abstract class ReActAgent {
       this.session.throwIfAborted();
 
       const remaining = this.maxSteps - step + 1;
-      this.session.events.status('thinking', `${step}/${this.maxSteps}`);
+      this.session.events.status(AgentStatus.Thinking, `${step}/${this.maxSteps}`);
 
       if (remaining <= WRAP_UP_THRESHOLD) {
-        this.session.conversation.addSystemNote(buildWrapUpPrompt(remaining), {emit: false});
+        this.session.conversation.addTurnNote(buildWrapUpPrompt(remaining), {emit: false});
       }
 
       let streamed = false;
@@ -62,6 +70,7 @@ export abstract class ReActAgent {
 
       const message = await this.streamLlm(this.buildLlmMessages(), {
         ...this.session.llmOptions(),
+        allowTools: step < this.maxSteps,
         onReasoningDelta: (delta) => {
           if (!streamedThinking) {
             this.session.events.startThinkingStream();
@@ -90,7 +99,22 @@ export abstract class ReActAgent {
       const toolCalls = messageToolCalls(message);
 
       if (!toolCalls.length) {
-        return {steps: step, reason: 'final_answer'};
+        return {steps: step, reason: AgentRunReason.FinalAnswer};
+      }
+
+      if (step === this.maxSteps) {
+        for (const toolCall of toolCalls) {
+          this.session.conversation.finishTool(
+            toolCall.toolCallId,
+            MAX_STEPS_TOOL_ERROR,
+            {
+              error: MAX_STEPS_TOOL_ERROR,
+              toolName: toolCall.toolName,
+              toolInput: toolCall.input
+            }
+          );
+        }
+        return {steps: step, reason: AgentRunReason.MaxSteps};
       }
 
       for (const toolCall of toolCalls) {
@@ -99,7 +123,7 @@ export abstract class ReActAgent {
       }
     }
 
-    return {steps: this.maxSteps, reason: 'max_steps'};
+    return {steps: this.maxSteps, reason: AgentRunReason.MaxSteps};
   }
 
   protected abstract streamLlm(
@@ -139,6 +163,8 @@ export abstract class ReActAgent {
       return;
     }
 
+    this.session.ledger.recordToolCall(call.name, parsed.data);
+
     try {
       const {output, display} = normalizeToolResult(
         await withTimeout(
@@ -159,7 +185,6 @@ export abstract class ReActAgent {
           this.session.turnSignal()
         )
       );
-      this.session.ledger.recordToolCall(call.name, parsed.data);
       this.session.conversation.finishTool(call.id, truncate(output), {
         display,
         toolName: call.name,

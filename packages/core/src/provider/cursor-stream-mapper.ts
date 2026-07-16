@@ -23,10 +23,17 @@ export type CursorStreamMapperSink = {
   startTool(call: ToolCallItem): void;
   finishTool(id: string, output: string, options?: FinishToolOptions): void;
   appendAssistantDelta(text: string): void;
+  showThinking(text: string): void;
   recordTokenUsage(usage: TokenUsage): void;
 };
 
-export type CursorStreamEventResult = 'usage' | 'tool' | 'text' | 'skip';
+export enum CursorStreamEventResult {
+  Usage = 'usage',
+  Tool = 'tool',
+  Thinking = 'thinking',
+  Text = 'text',
+  Skip = 'skip'
+}
 
 export function formatCursorToolOutput(result: unknown): string {
   if (typeof result === 'string') {
@@ -88,12 +95,15 @@ function mapToolCallEvent(
   }
 
   if (event.status === 'completed' || event.status === 'error') {
-    const call = openTools.get(id);
+    const call = openTools.get(id) ?? {id, name, input: event.args ?? {}};
+    if (!openTools.has(id)) {
+      sink.startTool(call);
+    }
     openTools.delete(id);
     const output = formatCursorToolOutput(event.result);
     const toolOptions: FinishToolOptions = {
-      toolName: call?.name,
-      toolInput: call?.input
+      toolName: call.name,
+      toolInput: call.input
     };
 
     if (event.status === 'error') {
@@ -112,30 +122,35 @@ export function mapCursorStreamEvent(
 ): CursorStreamEventResult {
   if (event.type === 'usage' && event.usage) {
     sink.recordTokenUsage(normalizeCursorUsage(event.usage));
-    return 'usage';
+    return CursorStreamEventResult.Usage;
   }
 
   if (event.type === 'tool_call') {
     mapToolCallEvent(sink, event, openTools);
-    return 'tool';
+    return CursorStreamEventResult.Tool;
+  }
+
+  if (event.type === 'thinking' && event.text) {
+    sink.showThinking(event.text);
+    return CursorStreamEventResult.Thinking;
   }
 
   const text = extractCursorText(event);
 
   if (!text) {
-    return 'skip';
+    return CursorStreamEventResult.Skip;
   }
 
-  if (event.type === 'assistant' || event.type === 'message' || event.delta || event.text) {
+  if (event.type === 'assistant' || event.type === 'message' || (!event.type && text)) {
     sink.appendAssistantDelta(text);
-    return 'text';
+    return CursorStreamEventResult.Text;
   }
 
-  return 'skip';
+  return CursorStreamEventResult.Skip;
 }
 
 export function shouldStartAssistantStream(event: CursorSdkMessage): boolean {
-  if (event.type === 'tool_call' || event.type === 'usage') {
+  if (event.type && event.type !== 'assistant' && event.type !== 'message') {
     return false;
   }
 

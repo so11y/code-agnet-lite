@@ -1,6 +1,6 @@
 import {difference, isEqual} from 'lodash-es';
 import type {SessionState} from './agent-memory.js';
-import {createEmptyTurnOperations} from './types/operations.js';
+import {TurnOperations} from './types/operations.js';
 
 export type InjectedSnapshot = Pick<
   SessionState,
@@ -33,7 +33,7 @@ export function createInjectedSnapshot(): InjectedSnapshot {
     confidence: 0,
     visitedFiles: [],
     searchedTerms: [],
-    operations: createEmptyTurnOperations()
+    operations: new TurnOperations()
   };
 }
 
@@ -45,11 +45,7 @@ export function buildInjectedSnapshot(state: SessionState): InjectedSnapshot {
     confidence: state.confidence,
     visitedFiles: [...state.visitedFiles],
     searchedTerms: [...state.searchedTerms],
-    operations: {
-      writtenFiles: [...state.operations.writtenFiles],
-      deletedFiles: [...state.operations.deletedFiles],
-      executedCommands: [...state.operations.executedCommands]
-    }
+    operations: state.operations.clone()
   };
 }
 

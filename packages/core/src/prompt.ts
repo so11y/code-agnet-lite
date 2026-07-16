@@ -27,11 +27,11 @@ export const ROUTER_PROMPT = `你是代码 Agent 的任务路由器。
 
 1. 用户明确指定执行模式时，必须服从。
 
-   * 明确出现“DAG”“agent DAG”“使用 DAG”“启动 DAG 流程”，必须返回 dag。
-   * 明确出现“ToT”“Tree of Thoughts”，必须返回 tot。
-   * 明确出现“React 模式”，必须返回 react。
+   * 明确要求“使用 DAG”“启动 agent DAG 流程”，必须返回 dag。
+   * 明确要求“使用 ToT”“采用 Tree of Thoughts”，必须返回 tot。
+   * 明确要求“使用 React 模式”，必须返回 react。
 
-2. 用户明确指定 DAG 后，不得因为任务中包含读取文件、切换 cwd、调用工具、执行命令等内容而返回 react。
+2. 仅讨论或询问 DAG / ToT / React 本身不等于指定执行模式；用户明确指定后，不得因为任务中包含读取文件、切换 cwd、调用工具、执行命令等内容而改判 react。
 
 3. 以下任一特征出现时，优先选择 dag：
 
@@ -158,7 +158,10 @@ export function buildWrapUpPrompt(remaining: number): string {
 
 import type {AgentMessage} from './session-types.js';
 
-export function createWorkspaceSystemMessages(cwd: string, leadingPrompt = SYSTEM_PROMPT): AgentMessage[] {
+export function createWorkspaceSystemMessages(
+  cwd: string,
+  leadingPrompt = SYSTEM_PROMPT
+): [AgentMessage, AgentMessage] {
   return [
     {role: 'system', content: leadingPrompt},
     {role: 'system', content: formatWorkspaceContext(cwd)}

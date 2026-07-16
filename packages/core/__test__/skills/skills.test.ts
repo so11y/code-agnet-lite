@@ -83,8 +83,8 @@ describe('Skills.ensureLoaded', () => {
       (message) => message.role === 'system' && String(message.content).startsWith('[Skill:')
     );
     expect(skillMessages).toHaveLength(1);
-    expect(String(skillMessages[0].content)).toContain('body:/b');
-    expect(String(skillMessages[0].content)).not.toContain('body:/a');
+    expect(String(skillMessages[0]!.content)).toContain('body:/b');
+    expect(String(skillMessages[0]!.content)).not.toContain('body:/a');
   });
 });
 

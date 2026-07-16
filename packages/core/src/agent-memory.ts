@@ -1,11 +1,11 @@
 import {compact, union} from 'lodash-es';
-import {createEmptyTurnOperations, type TurnOperations} from './types/operations.js';
+import {TurnOperations, type TurnOperationsSource} from './types/operations.js';
 
 export type MemoryMergeSource = {
   facts?: string[];
   visitedFiles?: string[];
   searchedTerms?: string[];
-  operations?: TurnOperations;
+  operations?: TurnOperationsSource;
 };
 
 /** 通用程序侧记忆：文件访问、操作记录、facts */
@@ -13,7 +13,7 @@ export class BaseMemory {
   facts: string[] = [];
   visitedFiles: string[] = [];
   searchedTerms: string[] = [];
-  operations: TurnOperations = createEmptyTurnOperations();
+  operations = new TurnOperations();
 
   mergeFrom(source: MemoryMergeSource) {
     if (source.facts?.length) {
@@ -29,18 +29,7 @@ export class BaseMemory {
     }
 
     if (source.operations) {
-      this.operations.writtenFiles = union(
-        this.operations.writtenFiles,
-        source.operations.writtenFiles
-      );
-      this.operations.deletedFiles = union(
-        this.operations.deletedFiles,
-        source.operations.deletedFiles
-      );
-      this.operations.executedCommands = union(
-        this.operations.executedCommands,
-        source.operations.executedCommands
-      );
+      this.operations.merge(source.operations);
     }
   }
 }

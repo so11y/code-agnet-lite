@@ -10,8 +10,8 @@ type CursorSessionState = {
 
 function wrapSdkAgent(agent: SDKAgent): CursorAgentHandle {
   return {
-    async send(prompt: string): Promise<CursorRunHandle> {
-      const run: Run = await agent.send(prompt);
+    async send(prompt, options): Promise<CursorRunHandle> {
+      const run: Run = await agent.send(prompt, options);
       return {
         stream: () => run.stream(),
         wait: () => run.wait()

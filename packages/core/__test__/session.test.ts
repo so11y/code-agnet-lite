@@ -31,13 +31,13 @@ describe('AgentSession cwd', () => {
   it('resets workspace-scoped conversation and memory before a new turn', async () => {
     const session = new AgentSession({cwd: '/old', plugins: [], onEvent() {}});
     session.conversation.appendUser('old task');
-    session.ledger.state.facts.push('old fact');
-    session.ledger.state.visitedFiles.push('src/old.ts');
+    session.ledger.addFacts(['old fact']);
+    session.ledger.recordToolCall('read_file', {path: 'src/old.ts'});
 
     await session.ensureWorkspace('/new');
 
     expect(session.conversation.messages).toHaveLength(2);
-    expect(session.conversation.messages[1].content).toBe('当前工作区：/new');
+    expect(session.conversation.messages[1]!.content).toBe('当前工作区：/new');
     expect(session.ledger.state.facts).toEqual([]);
     expect(session.ledger.state.visitedFiles).toEqual([]);
   });
@@ -45,7 +45,7 @@ describe('AgentSession cwd', () => {
   it('preserves the active turn when a tool changes workspace', async () => {
     const session = new AgentSession({cwd: '/old', plugins: [], onEvent() {}});
     session.conversation.appendUser('current task');
-    session.ledger.state.facts.push('current fact');
+    session.ledger.addFacts(['current fact']);
 
     await session.setWorkspace('/new');
 
@@ -60,9 +60,23 @@ describe('AgentSession turn state', () => {
     const session = new AgentSession({cwd: '/project', onEvent() {}});
 
     session.beginTurn('first');
-    session.ledger.state.hypotheses = ['old hypothesis'];
-    session.ledger.state.confidence = 0.8;
-    session.ledger.state.noProgress = 2;
+    session.ledger.applyHypotheses(['old hypothesis']);
+    session.ledger.rejectHypotheses(['old rejected']);
+    session.ledger.applyReview(
+      {
+        directionCorrect: true,
+        summary: 'review',
+        confidence: 0.8,
+        facts: [],
+        rejected: [],
+        hypotheses: [],
+        verification: []
+      },
+      false
+    );
+    const progress = session.ledger.snapshotProgress();
+    session.ledger.noteProgress(progress);
+    session.ledger.noteProgress(progress);
     session.ledger.recordToolCall('write_file', {path: 'same.ts'});
     session.flushStateDelta();
 
@@ -71,13 +85,33 @@ describe('AgentSession turn state', () => {
     session.flushStateDelta();
 
     expect(session.ledger.state.hypotheses).toEqual([]);
+    expect(session.ledger.state.rejected).toEqual([]);
     expect(session.ledger.state.confidence).toBe(0);
     expect(session.ledger.state.noProgress).toBe(0);
-    const deltas = session.conversation.messages.filter(
+    const states = session.conversation.messages.filter(
+      (message) => message.role === 'system' && String(message.content).startsWith('[state')
+    );
+    expect(states).toHaveLength(2);
+    expect(String(states[1]!.content)).toContain('+ written this turn: same.ts');
+  });
+
+  it('keeps each state change as an incremental history entry', () => {
+    const session = new AgentSession({cwd: '/project', onEvent() {}});
+    session.beginTurn('inspect');
+    session.flushStateDelta();
+
+    session.ledger.recordToolCall('read_file', {path: 'first.ts'});
+    session.flushStateDelta();
+    session.ledger.recordToolCall('read_file', {path: 'second.ts'});
+    session.flushStateDelta();
+
+    const states = session.conversation.messages.filter(
       (message) => message.role === 'system' && String(message.content).startsWith('[stateΔ')
     );
-    expect(deltas).toHaveLength(2);
-    expect(String(deltas[1].content)).toContain('+ written this turn: same.ts');
+    expect(states).toHaveLength(2);
+    expect(String(states[0]!.content)).toContain('first.ts');
+    expect(String(states[0]!.content)).not.toContain('second.ts');
+    expect(String(states[1]!.content)).toContain('second.ts');
   });
 
   it('counts side effects as progress', () => {
@@ -88,5 +122,14 @@ describe('AgentSession turn state', () => {
     session.ledger.noteProgress(before);
 
     expect(session.ledger.state.noProgress).toBe(0);
+  });
+
+  it('keeps an unknown-path mutating tool visible to verification', () => {
+    const session = new AgentSession({cwd: '/project', onEvent() {}});
+    session.beginTurn('edit');
+
+    session.ledger.recordToolCall('ApplyPatch', {patch: '...'});
+
+    expect(session.ledger.snapshotOperations().writtenFiles).toEqual(['[ApplyPatch]']);
   });
 });

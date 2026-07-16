@@ -28,7 +28,7 @@ export interface LlmProvider {
 }
 
 export type CursorAgentHandle = {
-  send(prompt: string): Promise<CursorRunHandle>;
+  send(prompt: string, options?: {mode?: 'agent' | 'plan'}): Promise<CursorRunHandle>;
   dispose(): Promise<void>;
 };
 

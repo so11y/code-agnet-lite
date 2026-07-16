@@ -22,7 +22,7 @@ const providers: Record<AgentProviderKind, AgentProvider> = {
   cursor: {
     kind: 'cursor',
     provide(session) {
-      return new CursorCodeAgent(session.config, session);
+      return new CursorCodeAgent(session);
     },
     dispose(session) {
       return cursorSessionPool.dispose(session);

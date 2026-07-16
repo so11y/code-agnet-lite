@@ -1,4 +1,4 @@
-import type {AgentStatus, ChatItem} from '@code-agent-lite/core';
+import {AgentStatus, type ChatItem} from '@code-agent-lite/core';
 import {resolveSubmitInput} from './resolve-submit-input.js';
 
 export type SubmitActions = {
@@ -24,7 +24,7 @@ export async function handleSubmit(input: string, actions: SubmitActions): Promi
       if (intent.userDisplay) {
         actions.appendMessage({role: 'user', content: intent.userDisplay});
       }
-      actions.updateStatus('error', intent.message);
+      actions.updateStatus(AgentStatus.Error, intent.message);
       for (const message of intent.systemMessages ?? []) {
         actions.appendMessage({role: 'system', content: message});
       }

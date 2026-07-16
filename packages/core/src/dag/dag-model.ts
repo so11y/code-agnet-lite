@@ -1,5 +1,6 @@
 import {BaseMemory, type MemoryMergeSource} from '../agent-memory.js';
 import {formatError} from '@code-agent-lite/shared';
+import type {VerificationOutcome} from '../session-types.js';
 
 export const TASK_NODE_KINDS = ['explore', 'edit', 'verify', 'merge'] as const;
 export type TaskNodeKind = (typeof TASK_NODE_KINDS)[number];
@@ -16,10 +17,14 @@ export type TaskNodeStatus = typeof TASK_NODE_STATUS[keyof typeof TASK_NODE_STAT
 
 export class TaskOutput extends BaseMemory {
   summary: string;
+  verification?: VerificationOutcome;
 
-  constructor(source: MemoryMergeSource & {summary?: string} = {}) {
+  constructor(
+    source: MemoryMergeSource & {summary?: string; verification?: VerificationOutcome} = {}
+  ) {
     super();
     this.summary = source.summary ?? '';
+    this.verification = source.verification;
     this.mergeFrom(source);
   }
 }
